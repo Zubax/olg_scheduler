@@ -15,28 +15,28 @@
 /// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <scheduler.hpp>
-#include <test.hpp>
-#include <semihost.hpp>
 #include <helpers.hpp>
+#include <scheduler.hpp>
+#include <semihost.hpp>
+#include <test.hpp>
 
 namespace dyshlo::sitl
 {
 template <typename Clock>
-static auto& operator<<(auto& str, const typename telega::scheduler::SpinResult<Clock>& obj)
+static auto& operator<<(auto& str, const typename embedded_scheduler::scheduler::SpinResult<Clock>& obj)
 {
     str << "SpinResult{next_deadline=" << obj.next_deadline << ", worst_lateness=" << obj.worst_lateness << "}";
     return str;
 }
 template <typename TimePoint>
-static auto& operator<<(auto& str, const typename telega::scheduler::Arg<TimePoint>& obj)
+static auto& operator<<(auto& str, const typename embedded_scheduler::scheduler::Arg<TimePoint>& obj)
 {
     str << "Arg{event=" << &obj.event << ", deadline=" << obj.deadline << ", approx_now=" << obj.approx_now << "}";
     return str;
 }
 }  // namespace dyshlo::sitl
 
-namespace telega::scheduler::verification
+namespace embedded_scheduler::verification
 {
 TEST_CASE(EventLoopBasic)
 {
@@ -72,12 +72,10 @@ TEST_CASE(EventLoopBasic)
 
     // Register our handlers. Events with same deadline are ordered such that the one added later is processed later.
     semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
-    auto evt_a = evl->repeat(1000ms,
-                             [&](auto tp)
-                             {
-                                 a.emplace(tp);
-                                 semihost::log("A! ", tp);
-                             });
+    auto evt_a = evl->repeat(1000ms, [&](auto tp) {
+        a.emplace(tp);
+        semihost::log("A! ", tp);
+    });
     TEST_ASSERT_NOT_NULL(evt_a);
     TEST_ASSERT_EQUAL(11'000ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
     TEST_ASSERT_NULL(evl->getTree()[1U]);
@@ -85,8 +83,7 @@ TEST_CASE(EventLoopBasic)
 
     semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
     auto evt_b = evl->repeat(100ms,  // Smaller deadline goes on the left.
-                             [&](auto tp)
-                             {
+                             [&](auto tp) {
                                  b.emplace(tp);
                                  semihost::log("B! ", tp);
                              });
@@ -96,12 +93,10 @@ TEST_CASE(EventLoopBasic)
     TEST_ASSERT_NULL(evl->getTree()[2U]);
 
     semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
-    auto evt_c = evl->defer(SteadyClockMock::now() + 2000ms,
-                            [&](auto tp)
-                            {
-                                c.emplace(tp);
-                                semihost::log("C! ", tp);
-                            });
+    auto evt_c = evl->defer(SteadyClockMock::now() + 2000ms, [&](auto tp) {
+        c.emplace(tp);
+        semihost::log("C! ", tp);
+    });
     TEST_ASSERT_NOT_NULL(evt_c);
     TEST_ASSERT_EQUAL(10'100ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
     TEST_ASSERT_EQUAL(11'000ms, evl->getTree()[1U]->getDeadline().value().time_since_epoch());
@@ -111,8 +106,7 @@ TEST_CASE(EventLoopBasic)
 
     semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
     auto evt_d = evl->defer(SteadyClockMock::now() + 2000ms,  // Same deadline!
-                            [&](auto tp)
-                            {
+                            [&](auto tp) {
                                 d.emplace(tp);
                                 semihost::log("D! ", tp);
                             });
@@ -235,36 +229,29 @@ TEST_CASE(EventLoopTotalOrdering)
     std::uint8_t               a      = 0;
     std::uint8_t               b      = 0;
     std::uint8_t               c      = 0;
-    const auto                 report = [&](const auto tp, const char* const letter)
-    {
+    const auto                 report = [&](const auto tp, const char* const letter) {
         semihost::log(tp, " ", letter, "! a=", a, " b=", b, " c=", c);  //
     };
-    const auto evt_a = evl.repeat(10ms,
-                                  [&](auto tp)
-                                  {
-                                      report(tp, "A");
-                                      a++;
-                                      TEST_ASSERT(a > b);
-                                      TEST_ASSERT(a > c);
-                                  });
+    const auto evt_a = evl.repeat(10ms, [&](auto tp) {
+        report(tp, "A");
+        a++;
+        TEST_ASSERT(a > b);
+        TEST_ASSERT(a > c);
+    });
     TEST_ASSERT_NOT_NULL(evt_a);
-    const auto evt_b = evl.repeat(10ms,
-                                  [&](auto tp)
-                                  {
-                                      report(tp, "B");
-                                      b++;
-                                      TEST_ASSERT(b <= a);
-                                      TEST_ASSERT(b > c);
-                                  });
+    const auto evt_b = evl.repeat(10ms, [&](auto tp) {
+        report(tp, "B");
+        b++;
+        TEST_ASSERT(b <= a);
+        TEST_ASSERT(b > c);
+    });
     TEST_ASSERT_NOT_NULL(evt_b);
-    const auto evt_c = evl.repeat(10ms,
-                                  [&](auto tp)
-                                  {
-                                      report(tp, "C");
-                                      c++;
-                                      TEST_ASSERT(c <= a);
-                                      TEST_ASSERT(c <= b);
-                                  });
+    const auto evt_c = evl.repeat(10ms, [&](auto tp) {
+        report(tp, "C");
+        c++;
+        TEST_ASSERT(c <= a);
+        TEST_ASSERT(c <= b);
+    });
     TEST_ASSERT_NOT_NULL(evt_c);
     SteadyClockMock::advance(50ms);
     (void) evl.spin();
@@ -286,12 +273,10 @@ TEST_CASE(EventLoopPoll)
 
     std::optional<time_point> last_tp{};
     SteadyClockMock::advance(100ms);
-    auto evt = evl.poll(10ms,
-                        [&](const auto tp)
-                        {
-                            TEST_ASSERT_FALSE(last_tp);
-                            last_tp = tp.deadline;
-                        });
+    auto evt = evl.poll(10ms, [&](const auto tp) {
+        TEST_ASSERT_FALSE(last_tp);
+        last_tp = tp.deadline;
+    });
     TEST_ASSERT_NOT_NULL(evt);
     TEST_ASSERT_EQUAL(110ms, evl.getTree()[0U]->getDeadline().value().time_since_epoch());
 
@@ -355,4 +340,4 @@ TEST_CASE(HandleMovement)
     TEST_ASSERT_EQUAL_UINT64(0, evl.getTree().size());
 }
 
-}  // namespace telega::scheduler::verification
+}  // namespace embedded_scheduler::verification

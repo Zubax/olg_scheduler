@@ -18,15 +18,18 @@
 #pragma once
 
 #include <platform/heap.hpp>
-#include <cavl.hpp>
+
+#include <cavl/cavl.hpp>
+
 #include <cassert>
 #include <chrono>
 #include <concepts>
 #include <optional>
 #include <variant>
 
-namespace telega::scheduler
+namespace embedded_scheduler
 {
+
 template <typename TimePoint>
 class Event;
 
@@ -338,5 +341,7 @@ public:
 
 private:
     cavl::Tree<Event<time_point>> tree_;
-};
-}  // namespace telega::scheduler
+
+}; // EventLoop
+
+}  // namespace embedded_scheduler

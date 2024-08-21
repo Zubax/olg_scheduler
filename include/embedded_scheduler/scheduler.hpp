@@ -1,4 +1,4 @@
-/// Source: https://github.com/pavel-kirienko/cavl
+/// Source: https://github.com/serges147/embedded_scheduler
 ///
 /// Copyright (c) 2024 www.zubax.com
 ///

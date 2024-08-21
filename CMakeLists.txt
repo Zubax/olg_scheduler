@@ -1,5 +1,5 @@
 # This software is distributed under the terms of the MIT License.
-# Copyright (c) 2024 www.zubax.com
+# Copyright (c) 2024 Zubax Robotics  <info@zubax.com>
 
 cmake_minimum_required(VERSION 3.12)
 project(embedded_scheduler_tests CXX)

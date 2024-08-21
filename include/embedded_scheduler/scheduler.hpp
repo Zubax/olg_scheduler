@@ -1,4 +1,4 @@
-/// Source: https://github.com/serges147/embedded_scheduler
+/// Source: https://github.com/pavel-kirienko/cavl
 ///
 /// Copyright (c) 2024 www.zubax.com
 ///
@@ -15,11 +15,12 @@
 /// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "embedded_scheduler/scheduler.hpp"
+#pragma once
 
-int main()
+namespace embedded_scheduler
 {
-    constexpr embedded_scheduler::Dummy dummy;
-    (void) dummy;
-    return 0;
-}
+
+struct Dummy
+{};
+
+}  // namespace embedded_scheduler

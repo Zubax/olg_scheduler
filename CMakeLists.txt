@@ -1,5 +1,5 @@
 # This software is distributed under the terms of the MIT License.
-# Copyright (c) 2024 Zubax
+# Copyright (c) 2024 www.zubax.com
 
 cmake_minimum_required(VERSION 3.12)
 project(embedded_scheduler_tests CXX)
@@ -41,4 +41,5 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
 
 add_executable(test_embedded_scheduler_cpp20 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_embedded_scheduler.cpp)
 set_target_properties(test_embedded_scheduler_cpp20 PROPERTIES CXX_STANDARD 20)
+target_include_directories(test_embedded_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_test("run_test_embedded_scheduler_cpp20" "test_embedded_scheduler_cpp20")

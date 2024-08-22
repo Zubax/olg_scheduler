@@ -31,6 +31,7 @@ using testing::Ne;
 using testing::IsNull;
 using testing::NotNull;
 
+// NOLINTBEGIN(bugprone-unchecked-optional-access)
 // NOLINTBEGIN(readability-function-cognitive-complexity, misc-const-correctness)
 // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 
@@ -368,3 +369,4 @@ TEST(TestEmbeddedScheduler, HandleMovement)
 
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 // NOLINTEND(readability-function-cognitive-complexity, misc-const-correctness)
+// NOLINTEND(bugprone-unchecked-optional-access)

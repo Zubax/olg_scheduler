@@ -29,6 +29,8 @@ Checks: >-
   -*-named-parameter,
   -bugprone-suspicious-include,
   -misc-include-cleaner,
+  -cppcoreguidelines-pro-type-vararg,
+  -hicpp-vararg,
 CheckOptions:
   - key:   readability-function-cognitive-complexity.Threshold
     value: '90'

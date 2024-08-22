@@ -301,32 +301,41 @@ public:
     template <typename ExecutionMonitor = std::monostate>
     [[nodiscard]] SpinResult<Clock> spin()
     {
-        auto next  = time_point::max();
-        auto now   = Clock::now();
-        auto worst = duration::zero();
+        SpinResult<Clock> result{.next_deadline  = time_point::max(),
+                                 .worst_lateness = duration::zero(),
+                                 .approx_now     = time_point::min()};
+        if (tree_.empty())
+        {
+            result.approx_now = Clock::now();
+            return result;
+        }
+
         while (auto* const evt = static_cast<EventProxy*>(tree_.min()))
         {
-            next = evt->getDeadline().value();  // The deadline is guaranteed to be set because it is in the tree.
-            auto lateness = now - next;         // Positive if late, zero if on-time.
-            if (lateness < duration::zero())    // Too early -- either we need to sleep or the time sample is obsolete.
+            // The deadline is guaranteed to be set because it is in the tree.
+            const auto deadline = evt->getDeadline().value();
+            if (result.approx_now < deadline)  // Too early -- either we need to sleep or the time sample is obsolete.
             {
-                now      = Clock::now();  // The number of calls to Clock::now() is minimized.
-                lateness = now - next;
-                if (lateness < duration::zero())  // Nope, even with the latest time sample we are still early -- exit.
+                result.approx_now = Clock::now();  // The number of calls to Clock::now() is minimized.
+                if (result.approx_now < deadline)  // Nope, even with the latest time sample we are still early -- exit.
                 {
+                    result.next_deadline = deadline;
                     break;
                 }
             }
             {
                 ExecutionMonitor monitor{};  // RAII indication of the start and end of the event execution.
                 // Execution will remove the event from the tree and then possibly re-insert it with a new deadline.
-                evt->execute({.event = *evt, .deadline = next, .approx_now = now});
+                evt->execute({.event = *evt, .deadline = deadline, .approx_now = result.approx_now});
                 (void) monitor;
             }
-            worst = std::max(lateness, worst);
+            result.next_deadline  = time_point::max();  // Reset the next deadline to the maximum possible value.
+            result.worst_lateness = std::max(result.worst_lateness, result.approx_now - deadline);
         }
-        assert(worst >= duration::zero());
-        return {.next_deadline = next, .worst_lateness = worst, .approx_now = now};
+
+        assert(result.approx_now > time_point::min());
+        assert(result.worst_lateness >= duration::zero());
+        return result;
     }
 
     /// True if there are no registered events.

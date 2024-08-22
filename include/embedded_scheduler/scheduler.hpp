@@ -118,16 +118,17 @@ protected:
     void schedule(const TimePoint dead) noexcept
     {
         cancel();
-        deadline_      = dead;  // The deadline shall be set before the event is inserted into the tree.
-        const auto ptr = tree_.search(
+        deadline_               = dead;  // The deadline shall be set before the event is inserted into the tree.
+        const auto ptr_existing = tree_.search(
             [dead](const Event& other) {
                 /// No two deadlines compare equal, which allows us to have multiple nodes with the same deadline in
                 /// the tree. With two nodes sharing the same deadline, the one added later is considered to be later.
                 return (dead >= other.deadline_.value()) ? +1 : -1;
             },
             [this] { return this; });
-        assert(ptr == this);
-        (void) ptr;
+        assert(std::get<0>(ptr_existing) == this);
+        assert(!std::get<1>(ptr_existing));
+        (void) ptr_existing;
     }
 
     /// The execution handler shall either reschedule or cancel the event

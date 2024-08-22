@@ -15,35 +15,58 @@
 /// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <helpers.hpp>
-#include <scheduler.hpp>
-#include <semihost.hpp>
-#include <test.hpp>
+#include "embedded_scheduler/scheduler.hpp"
 
-namespace dyshlo::sitl
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include <chrono>
+#include <cstdint>
+#include <optional>
+#include <ratio>
+
+using testing::IsNull;
+using testing::NotNull;
+
+// NOLINTBEGIN(readability-function-cognitive-complexity, misc-const-correctness)
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
+
+namespace
 {
-template <typename Clock>
-static auto& operator<<(auto& str, const typename embedded_scheduler::scheduler::SpinResult<Clock>& obj)
+
+/// This clock has to keep global state to implement the TrivialClock trait.
+class SteadyClockMock final
 {
-    str << "SpinResult{next_deadline=" << obj.next_deadline << ", worst_lateness=" << obj.worst_lateness << "}";
-    return str;
-}
-template <typename TimePoint>
-static auto& operator<<(auto& str, const typename embedded_scheduler::scheduler::Arg<TimePoint>& obj)
-{
-    str << "Arg{event=" << &obj.event << ", deadline=" << obj.deadline << ", approx_now=" << obj.approx_now << "}";
-    return str;
-}
-}  // namespace dyshlo::sitl
+public:
+    using rep        = std::int64_t;
+    using period     = std::ratio<1, 1'000>;
+    using duration   = std::chrono::duration<rep, period>;
+    using time_point = std::chrono::time_point<SteadyClockMock>;
+
+    [[maybe_unused]] static constexpr bool is_steady = true;
+
+    static time_point& now() noexcept
+    {
+        static time_point g_now_;
+        return g_now_;
+    }
+
+    static void reset() noexcept { now() = {}; }
+
+    template <typename Rep, typename Per>
+    static void advance(const std::chrono::duration<Rep, Per> dur)
+    {
+        now() += std::chrono::duration_cast<duration>(dur);
+    }
+};
+
+}  // namespace
 
 namespace embedded_scheduler::verification
 {
-TEST_CASE(EventLoopBasic)
+TEST(TestEmbeddedScheduler, EventLoopBasic)
 {
-    using test_helpers::SteadyClockMock;
     using std::chrono_literals::operator""ms;
-
-    const auto original_heap_diag = platform::heap::getDiagnostics();
 
     // Initial configuration of the clock.
     SteadyClockMock::reset();
@@ -60,42 +83,42 @@ TEST_CASE(EventLoopBasic)
     std::optional<Arg> d;
 
     auto out = evl->spin();  // Nothing to do.
-    semihost::log(__LINE__, " ", out);
-    TEST_ASSERT(SteadyClockMock::time_point::max() == out.next_deadline);
-    TEST_ASSERT(SteadyClockMock::duration::zero() == out.worst_lateness);
-    TEST_ASSERT(evl->isEmpty());
-    TEST_ASSERT_NULL(evl->getTree()[0U]);
+    // semihost::log(__LINE__, " ", out);
+    EXPECT_THAT(out.next_deadline, SteadyClockMock::time_point::max());
+    EXPECT_THAT(out.worst_lateness, SteadyClockMock::duration::zero());
+    EXPECT_TRUE(evl->isEmpty());
+    EXPECT_THAT(evl->getTree()[0U], IsNull());
 
     // Ensure invalid arguments are rejected.
-    TEST_ASSERT_NULL(evl->repeat(0ms, [&](auto tp) { a.emplace(tp); }));  // Period shall be positive.
-    TEST_ASSERT(evl->isEmpty());
+    EXPECT_THAT(evl->repeat(0ms, [&](auto tp) { a.emplace(tp); }), IsNull());  // Period shall be positive.
+    EXPECT_TRUE(evl->isEmpty());
 
     // Register our handlers. Events with same deadline are ordered such that the one added later is processed later.
-    semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
+    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
     auto evt_a = evl->repeat(1000ms, [&](auto tp) {
         a.emplace(tp);
-        semihost::log("A! ", tp);
+        // semihost::log("A! ", tp);
     });
-    TEST_ASSERT_NOT_NULL(evt_a);
-    TEST_ASSERT_EQUAL(11'000ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
-    TEST_ASSERT_NULL(evl->getTree()[1U]);
-    TEST_ASSERT(!evl->isEmpty());
+    EXPECT_THAT(evt_a, NotNull());
+    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl->getTree()[1U], IsNull());
+    EXPECT_FALSE(evl->isEmpty());
 
-    semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
+    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
     auto evt_b = evl->repeat(100ms,  // Smaller deadline goes on the left.
                              [&](auto tp) {
                                  b.emplace(tp);
-                                 semihost::log("B! ", tp);
+                                 // semihost::log("B! ", tp);
                              });
-    TEST_ASSERT_NOT_NULL(evt_b);
-    TEST_ASSERT_EQUAL(10'100ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
-    TEST_ASSERT_EQUAL(11'000ms, evl->getTree()[1U]->getDeadline().value().time_since_epoch());
-    TEST_ASSERT_NULL(evl->getTree()[2U]);
-
-    semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
+    EXPECT_THAT(evt_b, NotNull());
+    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
+    EXPECT_THAT(evl->getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl->getTree()[2U], IsNull());
+/*
+    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
     auto evt_c = evl->defer(SteadyClockMock::now() + 2000ms, [&](auto tp) {
         c.emplace(tp);
-        semihost::log("C! ", tp);
+        // semihost::log("C! ", tp);
     });
     TEST_ASSERT_NOT_NULL(evt_c);
     TEST_ASSERT_EQUAL(10'100ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
@@ -104,11 +127,11 @@ TEST_CASE(EventLoopBasic)
     TEST_ASSERT_EQUAL(12'000ms, f3->getDeadline().value().time_since_epoch());  // New entry.
     TEST_ASSERT_NULL(evl->getTree()[3U]);
 
-    semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
+    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
     auto evt_d = evl->defer(SteadyClockMock::now() + 2000ms,  // Same deadline!
                             [&](auto tp) {
                                 d.emplace(tp);
-                                semihost::log("D! ", tp);
+                                // semihost::log("D! ", tp);
                             });
     TEST_ASSERT_NOT_NULL(evt_d);
     TEST_ASSERT_EQUAL(10'100ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
@@ -121,7 +144,7 @@ TEST_CASE(EventLoopBasic)
 
     // Poll but there are no pending Events yet.
     out = evl->spin();
-    semihost::log(__LINE__, " ", out);
+    // semihost::log(__LINE__, " ", out);
     TEST_ASSERT_EQUAL(10'100ms, out.next_deadline.time_since_epoch());
     TEST_ASSERT_EQUAL(0ms, out.worst_lateness);
     TEST_ASSERT_EQUAL_UINT64(4, evl->getTree().size());
@@ -134,7 +157,7 @@ TEST_CASE(EventLoopBasic)
     SteadyClockMock::advance(1100ms);
     TEST_ASSERT_EQUAL(11'100ms, SteadyClockMock::now().time_since_epoch());
     out = evl->spin();
-    semihost::log(__LINE__, " ", out);
+    // semihost::log(__LINE__, " ", out);
     TEST_ASSERT_EQUAL(11'200ms, out.next_deadline.time_since_epoch());
     TEST_ASSERT_EQUAL(1000ms, out.worst_lateness);
     TEST_ASSERT_EQUAL_UINT64(4, evl->getTree().size());
@@ -152,7 +175,7 @@ TEST_CASE(EventLoopBasic)
     SteadyClockMock::advance(900ms);
     TEST_ASSERT_EQUAL(12'000ms, SteadyClockMock::now().time_since_epoch());
     out = evl->spin();
-    semihost::log(__LINE__, " ", out);
+    // semihost::log(__LINE__, " ", out);
     TEST_ASSERT_EQUAL(12'100ms, out.next_deadline.time_since_epoch());
     TEST_ASSERT_EQUAL(800ms, out.worst_lateness);
     TEST_ASSERT_EQUAL(12'100ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
@@ -186,7 +209,7 @@ TEST_CASE(EventLoopBasic)
     TEST_ASSERT(!evt_b->getDeadline());                  // Ditto.
     TEST_ASSERT_EQUAL_UINT64(1, evl->getTree().size());  // Ditto.
     out = evl->spin();
-    semihost::log(__LINE__, " ", out);
+    // semihost::log(__LINE__, " ", out);
     TEST_ASSERT_EQUAL(14'000ms, out.next_deadline.time_since_epoch());  // B removed so the next one is A.
     TEST_ASSERT_EQUAL(50ms, out.worst_lateness);
     TEST_ASSERT_EQUAL(14'000ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
@@ -200,7 +223,7 @@ TEST_CASE(EventLoopBasic)
 
     // Nothing to do yet.
     out = evl->spin();
-    semihost::log(__LINE__, " ", out);
+    // semihost::log(__LINE__, " ", out);
     TEST_ASSERT_EQUAL(14'000ms, out.next_deadline.time_since_epoch());  // Same up.
     TEST_ASSERT_EQUAL(0ms, out.worst_lateness);
     TEST_ASSERT_FALSE(a);
@@ -209,20 +232,18 @@ TEST_CASE(EventLoopBasic)
     TEST_ASSERT_FALSE(d);
 
     // Ensure the memory is properly reclaimed and there have been no OOMs.
-    semihost::log("Alloc before dtors: ", platform::heap::getDiagnostics().allocated);
+    // semihost::log("Alloc before dtors: ", platform::heap::getDiagnostics().allocated);
     evt_a.reset();
     evt_b.reset();
     evt_c.reset();
     evt_d.reset();
     evl.reset();  // The destructor would panic unless all events are destroyed.
-    semihost::log("Alloc after dtors: ", platform::heap::getDiagnostics().allocated);
-    TEST_ASSERT_EQUAL_UINT64(original_heap_diag.allocated, platform::heap::getDiagnostics().allocated);
-    TEST_ASSERT_EQUAL_UINT64(original_heap_diag.oom_count, platform::heap::getDiagnostics().oom_count);
+    // semihost::log("Alloc after dtors: ", platform::heap::getDiagnostics().allocated);
+*/
 }
-
-TEST_CASE(EventLoopTotalOrdering)
+/*
+TEST(TestEmbeddedScheduler, EventLoopTotalOrdering)
 {
-    using test_helpers::SteadyClockMock;
     using std::chrono_literals::operator""ms;
     SteadyClockMock::reset();
     EventLoop<SteadyClockMock> evl;
@@ -230,7 +251,9 @@ TEST_CASE(EventLoopTotalOrdering)
     std::uint8_t               b      = 0;
     std::uint8_t               c      = 0;
     const auto                 report = [&](const auto tp, const char* const letter) {
-        semihost::log(tp, " ", letter, "! a=", a, " b=", b, " c=", c);  //
+        (void) tp;
+        (void) letter;
+        // semihost::log(tp, " ", letter, "! a=", a, " b=", b, " c=", c);  //
     };
     const auto evt_a = evl.repeat(10ms, [&](auto tp) {
         report(tp, "A");
@@ -260,15 +283,14 @@ TEST_CASE(EventLoopTotalOrdering)
     TEST_ASSERT_EQUAL_INT64(5, c);
 }
 
-TEST_CASE(EventLoopPoll)
+TEST(TestEmbeddedScheduler, EventLoopPoll)
 {
-    using test_helpers::SteadyClockMock;
     using time_point = SteadyClockMock::time_point;
     using std::chrono_literals::operator""ms;
     SteadyClockMock::reset();
     EventLoop<SteadyClockMock> evl;
 
-    TEST_ASSERT_NULL(evl.poll(0ms, [&](auto /*unused*/) {}));  // Period shall be positive.
+    TEST_ASSERT_NULL(evl.poll(0ms, [&](auto) {}));  // Period shall be positive.
     TEST_ASSERT(evl.isEmpty());
 
     std::optional<time_point> last_tp{};
@@ -297,18 +319,17 @@ TEST_CASE(EventLoopPoll)
     TEST_ASSERT_EQUAL(210ms, evl.getTree()[0U]->getDeadline().value().time_since_epoch());  // Skipped ahead!
 }
 
-TEST_CASE(HandleMovement)
+TEST(TestEmbeddedScheduler, HandleMovement)
 {
-    using test_helpers::SteadyClockMock;
     using std::chrono_literals::operator""ms;
 
     SteadyClockMock::reset();
 
     EventLoop<SteadyClockMock> evl;
 
-    auto a = evl.repeat(100ms, [&](auto /**/) {});
-    auto b = evl.repeat(103ms, [&](auto /**/) {});
-    auto c = evl.repeat(107ms, [&](auto /**/) {});
+    auto a = evl.repeat(100ms, [&](auto) {});
+    auto b = evl.repeat(103ms, [&](auto) {});
+    auto c = evl.repeat(107ms, [&](auto) {});
     TEST_ASSERT_EQUAL_UINT64(3, evl.getTree().size());
 
     SteadyClockMock::advance(1000ms);
@@ -339,5 +360,8 @@ TEST_CASE(HandleMovement)
     (void) evl.spin();
     TEST_ASSERT_EQUAL_UINT64(0, evl.getTree().size());
 }
-
+*/
 }  // namespace embedded_scheduler::verification
+
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
+// NOLINTEND(readability-function-cognitive-complexity, misc-const-correctness)

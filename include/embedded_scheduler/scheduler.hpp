@@ -17,9 +17,8 @@
 
 #pragma once
 
-#include <platform/heap.hpp>
-
 #include <cavl/cavl.hpp>
+#include <platform/heap.hpp>
 
 #include <cassert>
 #include <chrono>

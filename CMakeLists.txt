@@ -2,7 +2,7 @@
 # Copyright (c) 2024 Zubax Robotics  <info@zubax.com>
 
 cmake_minimum_required(VERSION 3.12)
-project(embedded_scheduler_tests CXX)
+project(embedded_scheduler_tests C CXX)
 enable_testing()
 
 set(CTEST_OUTPUT_ON_FAILURE ON)
@@ -28,6 +28,16 @@ else ()
     add_custom_target(format COMMAND ${clang_format} -i -fallback-style=none -style=file --verbose ${format_files})
 endif ()
 
+include(FetchContent)
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+)
+FetchContent_MakeAvailable(googletest)
+#add_library(GTest::GTest INTERFACE IMPORTED)
+#target_link_libraries(GTest::GTest INTERFACE gtest_main)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 20)
@@ -42,4 +52,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
 add_executable(test_embedded_scheduler_cpp20 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_embedded_scheduler.cpp)
 set_target_properties(test_embedded_scheduler_cpp20 PROPERTIES CXX_STANDARD 20)
 target_include_directories(test_embedded_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-add_test("run_test_embedded_scheduler_cpp20" "test_embedded_scheduler_cpp20")
+target_include_directories(test_embedded_scheduler_cpp20 SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+target_link_libraries(test_embedded_scheduler_cpp20
+        PRIVATE
+        GTest::gmock_main
+)
+
+#add_test("run_test_embedded_scheduler_cpp20" "test_embedded_scheduler_cpp20")
+include(GoogleTest)
+gtest_discover_tests(test_embedded_scheduler_cpp20)

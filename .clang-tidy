@@ -27,6 +27,8 @@ Checks: >-
   -readability-identifier-length,
   -*-use-trailing-return-type,
   -*-named-parameter,
+  -bugprone-suspicious-include,
+  -misc-include-cleaner,
 CheckOptions:
   - key:   readability-function-cognitive-complexity.Threshold
     value: '90'

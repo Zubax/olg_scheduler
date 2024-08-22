@@ -120,8 +120,7 @@ protected:
         cancel();
         deadline_      = dead;  // The deadline shall be set before the event is inserted into the tree.
         const auto ptr = tree_.search(
-            [dead](const Event& other)
-            {
+            [dead](const Event& other) {
                 /// No two deadlines compare equal, which allows us to have multiple nodes with the same deadline in
                 /// the tree. With two nodes sharing the same deadline, the one added later is considered to be later.
                 return (dead >= other.deadline_.value()) ? +1 : -1;
@@ -247,9 +246,7 @@ public:
         {
         public:
             Impl(EventLoop& owner, const duration per, const Fun& fun) :
-                EventProxy(owner),
-                min_period_(per),
-                handler_(fun)
+                EventProxy(owner), min_period_(per), handler_(fun)
             {
                 this->schedule(Clock::now() + min_period_);
             }
@@ -341,6 +338,6 @@ public:
 private:
     cavl::Tree<Event<time_point>> tree_;
 
-}; // EventLoop
+};  // EventLoop
 
 }  // namespace embedded_scheduler

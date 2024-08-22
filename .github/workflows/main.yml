@@ -85,5 +85,6 @@ jobs:
       - uses: DoozyX/clang-format-lint-action@v0.18.1
         with:
           source: '.'
+          exclude: './lib'
           extensions: 'c,h,cpp,hpp'
           clangFormatVersion: 18

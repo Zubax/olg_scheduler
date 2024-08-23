@@ -15,7 +15,7 @@
 /// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "embedded_scheduler/scheduler.hpp"
+#include "olg_scheduler/scheduler.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -70,9 +70,10 @@ public:
 
 }  // namespace
 
-namespace embedded_scheduler::verification
+namespace olg_scheduler::verification
 {
-TEST(TestEmbeddedScheduler, EventLoopBasic)
+
+TEST(TestOlgScheduler, EventLoopBasic)
 {
     using std::chrono_literals::operator""ms;
 
@@ -255,7 +256,7 @@ TEST(TestEmbeddedScheduler, EventLoopBasic)
     // semihost::log("Alloc after dtors: ", platform::heap::getDiagnostics().allocated);
 }
 
-TEST(TestEmbeddedScheduler, EventLoopTotalOrdering)
+TEST(TestOlgScheduler, EventLoopTotalOrdering)
 {
     using std::chrono_literals::operator""ms;
 
@@ -297,7 +298,7 @@ TEST(TestEmbeddedScheduler, EventLoopTotalOrdering)
     EXPECT_THAT(c, 5);
 }
 
-TEST(TestEmbeddedScheduler, EventLoopPoll)
+TEST(TestOlgScheduler, EventLoopPoll)
 {
     using time_point = SteadyClockMock::time_point;
     using std::chrono_literals::operator""ms;
@@ -333,7 +334,7 @@ TEST(TestEmbeddedScheduler, EventLoopPoll)
     EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 210ms);  // Skipped ahead!
 }
 
-TEST(TestEmbeddedScheduler, EventLoopDefer_single_overdue)
+TEST(TestOlgScheduler, EventLoopDefer_single_overdue)
 {
     using time_point = SteadyClockMock::time_point;
     using std::chrono_literals::operator""ms;
@@ -352,7 +353,7 @@ TEST(TestEmbeddedScheduler, EventLoopDefer_single_overdue)
     EXPECT_THAT(out.approx_now.time_since_epoch(), 1030ms);
 }
 
-TEST(TestEmbeddedScheduler, EventLoopDefer_long_running_callback)
+TEST(TestOlgScheduler, EventLoopDefer_long_running_callback)
 {
     using duration = SteadyClockMock::duration;
     using std::chrono_literals::operator""ms;
@@ -381,7 +382,7 @@ TEST(TestEmbeddedScheduler, EventLoopDefer_long_running_callback)
                             std::make_tuple("b", 20ms, 100ms)));
 }
 
-TEST(TestEmbeddedScheduler, HandleMovement)
+TEST(TestOlgScheduler, HandleMovement)
 {
     using std::chrono_literals::operator""ms;
 
@@ -423,7 +424,7 @@ TEST(TestEmbeddedScheduler, HandleMovement)
     EXPECT_THAT(evl.getTree().size(), 0);
 }
 
-}  // namespace embedded_scheduler::verification
+}  // namespace olg_scheduler::verification
 
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 // NOLINTEND(readability-function-cognitive-complexity, misc-const-correctness)

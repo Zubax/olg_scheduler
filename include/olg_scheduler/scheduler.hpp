@@ -26,7 +26,7 @@
 #include <optional>
 #include <variant>
 
-namespace embedded_scheduler
+namespace olg_scheduler
 {
 
 template <typename TimePoint>
@@ -350,4 +350,4 @@ private:
 
 };  // EventLoop
 
-}  // namespace embedded_scheduler
+}  // namespace olg_scheduler

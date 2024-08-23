@@ -24,12 +24,16 @@
 #include <cstdint>
 #include <optional>
 #include <ratio>
+#include <string>
+#include <tuple>
+#include <vector>
 
 using testing::Gt;
 using testing::Le;
 using testing::Ne;
 using testing::IsNull;
 using testing::NotNull;
+using testing::ElementsAre;
 
 // NOLINTBEGIN(bugprone-unchecked-optional-access)
 // NOLINTBEGIN(readability-function-cognitive-complexity, misc-const-correctness)
@@ -90,6 +94,7 @@ TEST(TestEmbeddedScheduler, EventLoopBasic)
     // semihost::log(__LINE__, " ", out);
     EXPECT_THAT(out.next_deadline, SteadyClockMock::time_point::max());
     EXPECT_THAT(out.worst_lateness, SteadyClockMock::duration::zero());
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 10'000ms);
     EXPECT_TRUE(evl->isEmpty());
     EXPECT_THAT(evl->getTree()[0U], IsNull());
 
@@ -151,6 +156,7 @@ TEST(TestEmbeddedScheduler, EventLoopBasic)
     // semihost::log(__LINE__, " ", out);
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 10'100ms);
     EXPECT_THAT(out.worst_lateness, 0ms);
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 10'000ms);
     EXPECT_THAT(evl->getTree().size(), 4);
     EXPECT_FALSE(a);
     EXPECT_FALSE(b);
@@ -159,11 +165,12 @@ TEST(TestEmbeddedScheduler, EventLoopBasic)
 
     // Make the first two expire. The one-shot two are still pending.
     SteadyClockMock::advance(1100ms);
-    EXPECT_THAT(11'100ms, SteadyClockMock::now().time_since_epoch());
+    EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 11'100ms);
     out = evl->spin();
     // semihost::log(__LINE__, " ", out);
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 11'200ms);
     EXPECT_THAT(out.worst_lateness, 1000ms);
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 11'100ms);
     EXPECT_THAT(evl->getTree().size(), 4);
     EXPECT_TRUE(a);
     EXPECT_THAT(a.value().deadline.time_since_epoch(), 11'000ms);
@@ -182,6 +189,7 @@ TEST(TestEmbeddedScheduler, EventLoopBasic)
     // semihost::log(__LINE__, " ", out);
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 12'100ms);
     EXPECT_THAT(out.worst_lateness, 800ms);
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 12'000ms);
     EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 12'100ms);
     EXPECT_THAT(evl->getTree().size(), 2);  // C&D have left us.
     EXPECT_TRUE(a);
@@ -214,12 +222,13 @@ TEST(TestEmbeddedScheduler, EventLoopBasic)
     EXPECT_THAT(evl->getTree().size(), 1);  // Ditto.
     out = evl->spin();
     // semihost::log(__LINE__, " ", out);
-    EXPECT_THAT(14'000ms, out.next_deadline.time_since_epoch());  // B removed so the next one is A.
-    EXPECT_THAT(50ms, out.worst_lateness);
-    EXPECT_THAT(14'000ms, evl->getTree()[0U]->getDeadline().value().time_since_epoch());
+    EXPECT_THAT(out.next_deadline.time_since_epoch(), 14'000ms);  // B removed so the next one is A.
+    EXPECT_THAT(out.worst_lateness, 50ms);
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 13'050ms);
+    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 14'000ms);
     EXPECT_THAT(1, evl->getTree().size());  // Second dropped.
     EXPECT_TRUE(a);
-    EXPECT_THAT(13'000ms, a.value().deadline.time_since_epoch());
+    EXPECT_THAT(a.value().deadline.time_since_epoch(), 13'000ms);
     EXPECT_FALSE(b);
     EXPECT_FALSE(c);
     EXPECT_FALSE(d);
@@ -230,6 +239,7 @@ TEST(TestEmbeddedScheduler, EventLoopBasic)
     // semihost::log(__LINE__, " ", out);
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 14'000ms);  // Same up.
     EXPECT_THAT(out.worst_lateness, 0ms);
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 13'050ms);
     EXPECT_FALSE(a);
     EXPECT_FALSE(b);
     EXPECT_FALSE(c);
@@ -321,6 +331,54 @@ TEST(TestEmbeddedScheduler, EventLoopPoll)
     EXPECT_THAT(last_tp.value().time_since_epoch(), 140ms);
     last_tp.reset();
     EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 210ms);  // Skipped ahead!
+}
+
+TEST(TestEmbeddedScheduler, EventLoopDefer_single_overdue)
+{
+    using time_point = SteadyClockMock::time_point;
+    using std::chrono_literals::operator""ms;
+    SteadyClockMock::reset();
+    EventLoop<SteadyClockMock> evl;
+
+    auto evt = evl.defer(SteadyClockMock::now() + 1000ms, [&](auto) {});
+    EXPECT_TRUE(evt);
+
+    // This is special case - only one deferred event (and no "repeat"-s!), and it is already overdue (by +30ms).
+    // So, `next_deadline` should be `time_point::max()` b/c there will be nothing left pending after spin.
+    SteadyClockMock::advance(1000ms + 30ms);
+    const auto out = evl.spin();
+    EXPECT_THAT(out.next_deadline.time_since_epoch(), time_point::max().time_since_epoch());
+    EXPECT_THAT(out.worst_lateness, 30ms);
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 1030ms);
+}
+
+TEST(TestEmbeddedScheduler, EventLoopDefer_long_running_callback)
+{
+    using duration = SteadyClockMock::duration;
+    using std::chrono_literals::operator""ms;
+    SteadyClockMock::reset();
+    EventLoop<SteadyClockMock> evl;
+
+    std::vector<std::tuple<std::string, duration, duration>> calls;
+
+    auto evt_a = evl.defer(SteadyClockMock::now() + 0ms, [&](const auto& arg) {  //
+        // Emulate that it took whole 100ms to execute "a" callback,
+        // so it will be already overdue for the next "b" event - should be executed as well.
+        calls.emplace_back("a", arg.deadline.time_since_epoch(), arg.approx_now.time_since_epoch());
+        SteadyClockMock::advance(100ms);
+    });
+    auto evt_b = evl.defer(SteadyClockMock::now() + 20ms, [&](const auto& arg) {  //
+        calls.emplace_back("b", arg.deadline.time_since_epoch(), arg.approx_now.time_since_epoch());
+    });
+
+    const auto out = evl.spin();
+    EXPECT_THAT(out.next_deadline.time_since_epoch(), duration::max());
+    EXPECT_THAT(out.worst_lateness, 80ms);
+    EXPECT_THAT(out.approx_now.time_since_epoch(), 100ms);
+
+    EXPECT_THAT(calls,
+                ElementsAre(std::make_tuple("a", 0ms, 0ms),  //
+                            std::make_tuple("b", 20ms, 100ms)));
 }
 
 TEST(TestEmbeddedScheduler, HandleMovement)

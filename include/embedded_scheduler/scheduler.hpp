@@ -304,7 +304,7 @@ public:
         SpinResult<Clock> result{.next_deadline  = time_point::max(),
                                  .worst_lateness = duration::zero(),
                                  .approx_now     = time_point::min()};
-        if (tree_.empty())
+        if (tree_.empty()) [[unlikely]]
         {
             result.approx_now = Clock::now();
             return result;

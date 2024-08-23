@@ -28,15 +28,11 @@
 #include <tuple>
 #include <vector>
 
-using testing::_;
-using testing::Eq;
 using testing::Gt;
 using testing::Le;
 using testing::Ne;
 using testing::IsNull;
 using testing::IsEmpty;
-using testing::NotNull;
-using testing::Optional;
 using testing::ElementsAre;
 
 // NOLINTBEGIN(bugprone-unchecked-optional-access)

@@ -61,8 +61,7 @@ concept Callback = std::invocable<Fun, const Arg<TimePoint>&>;
 /// The event loop simply picks the leftmost node from the tree and checks if it is due.
 /// The time complexity of all operations is logarithmic of the number of registered events.
 ///
-/// B/c the event loop is not managing any memory for events, they may outlive the event loop -
-/// they just won't be executed anymore as soon as the event loop has been destroyed.
+/// Events shall not outlive the event loop.
 /// Events could be created, cancelled or destroyed from callbacks (even for themselves).
 template <typename TimePoint>
 class Event : private cavl::Node<Event<TimePoint>>
@@ -173,7 +172,7 @@ struct SpinResult final
 /// The event handler callbacks are invoked with one argument of type Arg<Clock::time_point>.
 /// Each factory method returns an event object by value,
 /// which can be used to cancel the event by destroying it.
-/// Event objects may outlive the event loop.
+/// The event loop shall outlive the events it manages.
 /// The time complexity of all operations is logarithmic of the number of registered events.
 template <typename Clock>
 class EventLoop final
@@ -193,18 +192,18 @@ private:
     };
 
 public:
-    EventLoop()                 = default;
-    EventLoop(const EventLoop&) = delete;
-    EventLoop(EventLoop&&)      = delete;
+    EventLoop() = default;
 
-    ~EventLoop() noexcept
+    EventLoop(const EventLoop&)                = delete;
+    EventLoop(EventLoop&&) noexcept            = delete;
+    EventLoop& operator=(const EventLoop&)     = delete;
+    EventLoop& operator=(EventLoop&&) noexcept = delete;
+
+    ~EventLoop()
     {
         // If this fails, it means that some events have outlived the event loop, which is not permitted.
         assert(isEmpty());
     }
-
-    EventLoop& operator=(const EventLoop&) = delete;
-    EventLoop& operator=(EventLoop&&)      = delete;
 
     /// The provided handler will be invoked with the specified interval starting from (now + period);
     /// if you also need to invoke it immediately, consider using defer().
@@ -220,15 +219,15 @@ public:
                 this->schedule(Clock::now() + period_, owner.tree_);
             }
 
+        private:
             void execute(const Arg<time_point>& args, Tree& tree) override
             {
                 this->schedule(args.deadline + period_, tree);  // Strict period advancement, no phase error growth.
                 handler_(args);
             }
 
-        private:
-            duration period_;
-            Fun      handler_;
+            const duration period_;
+            const Fun      handler_;
         };
         assert(period > duration::zero());
         return Impl{*this, period, std::forward<Fun>(handler)};
@@ -250,15 +249,16 @@ public:
             {
                 this->schedule(Clock::now() + min_period_, owner.tree_);
             }
+
+        private:
             void execute(const Arg<time_point>& args, Tree& tree) override
             {
                 this->schedule(args.approx_now + min_period_, tree);  // Accumulate phase error intentionally.
                 handler_(args);
             }
 
-        private:
-            duration min_period_;
-            Fun      handler_;
+            const duration min_period_;
+            const Fun      handler_;
         };
         assert(min_period > duration::zero());
         return Impl{*this, min_period, std::forward<Fun>(handler)};
@@ -276,14 +276,15 @@ public:
             {
                 this->schedule(deadline, owner.tree_);
             }
+
+        private:
             void execute(const Arg<time_point>& args, Tree&) override
             {
                 this->cancel();
                 handler_(args);
             }
 
-        private:
-            Fun handler_;
+            const Fun handler_;
         };
         return Impl{*this, deadline, std::forward<Fun>(handler)};
     }

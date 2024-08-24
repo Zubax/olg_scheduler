@@ -170,9 +170,9 @@ struct SpinResult final
 
 /// The event loop is used to execute activities at the specified time, either once or periodically.
 /// The event handler callbacks are invoked with one argument of type Arg<Clock::time_point>.
+/// The event loop shall outlive the events it manages.
 /// Each factory method returns an event object by value,
 /// which can be used to cancel the event by destroying it.
-/// The event loop shall outlive the events it manages.
 /// The time complexity of all operations is logarithmic of the number of registered events.
 template <typename Clock>
 class EventLoop final

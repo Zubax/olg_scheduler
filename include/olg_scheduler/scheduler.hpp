@@ -24,6 +24,7 @@
 #include <concepts>
 #include <optional>
 #include <utility>
+#include <variant>
 
 namespace olg_scheduler
 {

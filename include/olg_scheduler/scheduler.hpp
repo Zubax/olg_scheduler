@@ -60,8 +60,9 @@ concept Callback = std::invocable<Fun, const Arg<TimePoint>&>;
 /// The event loop simply picks the leftmost node from the tree and checks if it is due.
 /// The time complexity of all operations is logarithmic of the number of registered events.
 ///
-/// Events shall not outlive the event loop.
-/// Events could be cancelled or destroyed from callbacks (even for themselves).
+/// B/c the event loop is not managing any memory for events, they may outlive the event loop -
+/// they just won't be executed anymore as soon as the event loop has been destroyed.
+/// Events could be created, cancelled or destroyed from callbacks (even for themselves).
 template <typename TimePoint>
 class Event : private cavl::Node<Event<TimePoint>>
 {
@@ -169,9 +170,9 @@ struct SpinResult final
 
 /// The event loop is used to execute activities at the specified time, either once or periodically.
 /// The event handler callbacks are invoked with one argument of type Arg<Clock::time_point>.
-/// The event loop shall outlive the events it manages.
-/// Each factory method returns a smart pointer to the event object,
+/// Each factory method returns an event object by value,
 /// which can be used to cancel the event by destroying it.
+/// Event objects may outlive the event loop.
 /// The time complexity of all operations is logarithmic of the number of registered events.
 template <typename Clock>
 class EventLoop final

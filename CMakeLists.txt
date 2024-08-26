@@ -35,8 +35,6 @@ FetchContent_Declare(
         GIT_TAG v1.15.2
 )
 FetchContent_MakeAvailable(googletest)
-#add_library(GTest::GTest INTERFACE IMPORTED)
-#target_link_libraries(GTest::GTest INTERFACE gtest_main)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -51,8 +49,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
 
 add_executable(test_olg_scheduler_cpp20 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_olg_scheduler.cpp)
 set_target_properties(test_olg_scheduler_cpp20 PROPERTIES CXX_STANDARD 20)
-target_include_directories(test_olg_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(test_olg_scheduler_cpp20 SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+target_include_directories(test_olg_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olg_scheduler)
+target_include_directories(test_olg_scheduler_cpp20 SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
 target_link_libraries(test_olg_scheduler_cpp20
         PRIVATE
         GTest::gmock_main

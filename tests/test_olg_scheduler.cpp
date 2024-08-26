@@ -15,7 +15,7 @@
 /// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "olg_scheduler/scheduler.hpp"
+#include "olg_scheduler.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -32,7 +32,7 @@ using testing::Gt;
 using testing::Le;
 using testing::Ne;
 using testing::IsNull;
-using testing::NotNull;
+using testing::IsEmpty;
 using testing::ElementsAre;
 
 // NOLINTBEGIN(bugprone-unchecked-optional-access)
@@ -83,82 +83,57 @@ TEST(TestOlgScheduler, EventLoopBasic)
 
     using Loop = EventLoop<SteadyClockMock>;
     using Arg  = Arg<Loop::time_point>;
-    std::optional<Loop> evl;
-    evl.emplace();
+    Loop evl;
 
     std::optional<Arg> a;
     std::optional<Arg> b;
     std::optional<Arg> c;
     std::optional<Arg> d;
 
-    auto out = evl->spin();  // Nothing to do.
-    // semihost::log(__LINE__, " ", out);
+    auto out = evl.spin();  // Nothing to do.
     EXPECT_THAT(out.next_deadline, SteadyClockMock::time_point::max());
     EXPECT_THAT(out.worst_lateness, SteadyClockMock::duration::zero());
     EXPECT_THAT(out.approx_now.time_since_epoch(), 10'000ms);
-    EXPECT_TRUE(evl->isEmpty());
-    EXPECT_THAT(evl->getTree()[0U], IsNull());
-
-    // Ensure invalid arguments are rejected.
-    EXPECT_THAT(evl->repeat(0ms, [&](auto tp) { a.emplace(tp); }), IsNull());  // Period shall be positive.
-    EXPECT_TRUE(evl->isEmpty());
+    EXPECT_TRUE(evl.isEmpty());
+    EXPECT_THAT(evl.getTree()[0U], IsNull());
 
     // Register our handlers. Events with same deadline are ordered such that the one added later is processed later.
-    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
-    auto evt_a = evl->repeat(1000ms, [&](auto tp) {
-        a.emplace(tp);
-        // semihost::log("A! ", tp);
-    });
-    EXPECT_THAT(evt_a, NotNull());
-    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 11'000ms);
-    EXPECT_THAT(evl->getTree()[1U], IsNull());
-    EXPECT_FALSE(evl->isEmpty());
+    auto evt_a = evl.repeat(1000ms, [&](const auto& arg) { a.emplace(arg); });
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl.getTree()[1U], IsNull());
+    EXPECT_FALSE(evl.isEmpty());
 
-    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
-    auto evt_b = evl->repeat(100ms,  // Smaller deadline goes on the left.
-                             [&](auto tp) {
-                                 b.emplace(tp);
-                                 // semihost::log("B! ", tp);
-                             });
-    EXPECT_THAT(evt_b, NotNull());
-    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
-    EXPECT_THAT(evl->getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
-    EXPECT_THAT(evl->getTree()[2U], IsNull());
+    auto evt_b = evl.repeat(100ms,  // Smaller deadline goes on the left.
+                            [&](const auto& arg) { b.emplace(arg); });
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
+    EXPECT_THAT(evl.getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl.getTree()[2U], IsNull());
 
-    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
-    auto evt_c = evl->defer(SteadyClockMock::now() + 2000ms, [&](auto tp) {
-        c.emplace(tp);
-        // semihost::log("C! ", tp);
-    });
-    EXPECT_THAT(evt_c, NotNull());
-    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
-    EXPECT_THAT(evl->getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
-    const auto* const f3 = evl->getTree()[2U];
+    auto evt_c = evl.defer(SteadyClockMock::now() + 2000ms, [&](const auto& arg) { c.emplace(arg); });
+    // EXPECT_THAT(evt_c, Optional(_));
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
+    EXPECT_THAT(evl.getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    const auto* const f3 = evl.getTree()[2U];
     EXPECT_THAT(f3->getDeadline().value().time_since_epoch(), 12'000ms);  // New entry.
-    EXPECT_THAT(evl->getTree()[3U], IsNull());
+    EXPECT_THAT(evl.getTree()[3U], IsNull());
 
-    // semihost::log("Alloc ", __LINE__, ": ", platform::heap::getDiagnostics().allocated);
-    auto evt_d = evl->defer(SteadyClockMock::now() + 2000ms,  // Same deadline!
-                            [&](auto tp) {
-                                d.emplace(tp);
-                                // semihost::log("D! ", tp);
-                            });
-    EXPECT_THAT(evt_d, NotNull());
-    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
-    EXPECT_THAT(evl->getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
-    EXPECT_THAT(evl->getTree()[2U], f3);  // Entry added before this one.
-    const auto* const f4 = evl->getTree()[3U];
+    auto evt_d = evl.defer(SteadyClockMock::now() + 2000ms,  // Same deadline!
+                           [&](const auto& arg) { d.emplace(arg); });
+    // EXPECT_THAT(evt_d, NotNull());
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
+    EXPECT_THAT(evl.getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl.getTree()[2U], f3);  // Entry added before this one.
+    const auto* const f4 = evl.getTree()[3U];
     EXPECT_THAT(f3, Ne(f4));
     EXPECT_THAT(f4->getDeadline().value().time_since_epoch(), 12'000ms);  // New entry, same deadline added later.
-    EXPECT_THAT(evl->getTree()[4U], IsNull());
+    EXPECT_THAT(evl.getTree()[4U], IsNull());
 
     // Poll but there are no pending Events yet.
-    out = evl->spin();
-    // semihost::log(__LINE__, " ", out);
+    out = evl.spin();
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 10'100ms);
     EXPECT_THAT(out.worst_lateness, 0ms);
     EXPECT_THAT(out.approx_now.time_since_epoch(), 10'000ms);
-    EXPECT_THAT(evl->getTree().size(), 4);
+    EXPECT_THAT(evl.getTree().size(), 4);
     EXPECT_FALSE(a);
     EXPECT_FALSE(b);
     EXPECT_FALSE(c);
@@ -167,12 +142,11 @@ TEST(TestOlgScheduler, EventLoopBasic)
     // Make the first two expire. The one-shot two are still pending.
     SteadyClockMock::advance(1100ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 11'100ms);
-    out = evl->spin();
-    // semihost::log(__LINE__, " ", out);
+    out = evl.spin();
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 11'200ms);
     EXPECT_THAT(out.worst_lateness, 1000ms);
     EXPECT_THAT(out.approx_now.time_since_epoch(), 11'100ms);
-    EXPECT_THAT(evl->getTree().size(), 4);
+    EXPECT_THAT(evl.getTree().size(), 4);
     EXPECT_TRUE(a);
     EXPECT_THAT(a.value().deadline.time_since_epoch(), 11'000ms);
     EXPECT_TRUE(b);
@@ -181,18 +155,17 @@ TEST(TestOlgScheduler, EventLoopBasic)
     EXPECT_FALSE(d);
     a.reset();
     b.reset();
-    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 11'200ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 11'200ms);
 
     // Move on. Let C&D fire, they are canceled automatically.
     SteadyClockMock::advance(900ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 12'000ms);
-    out = evl->spin();
-    // semihost::log(__LINE__, " ", out);
+    out = evl.spin();
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 12'100ms);
     EXPECT_THAT(out.worst_lateness, 800ms);
     EXPECT_THAT(out.approx_now.time_since_epoch(), 12'000ms);
-    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 12'100ms);
-    EXPECT_THAT(evl->getTree().size(), 2);  // C&D have left us.
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 12'100ms);
+    EXPECT_THAT(evl.getTree().size(), 2);  // C&D have left us.
     EXPECT_TRUE(a);
     EXPECT_THAT(a.value().deadline.time_since_epoch(), 12'000ms);
     EXPECT_TRUE(b);
@@ -206,28 +179,27 @@ TEST(TestOlgScheduler, EventLoopBasic)
     c.reset();
     d.reset();
     // Ensure the deadline is cleared on those events that are canceled.
-    EXPECT_TRUE(evt_a->getDeadline());
-    EXPECT_TRUE(evt_b->getDeadline());
-    EXPECT_FALSE(evt_c->getDeadline());
-    EXPECT_FALSE(evt_d->getDeadline());
+    EXPECT_TRUE(evt_a.getDeadline());
+    EXPECT_TRUE(evt_b.getDeadline());
+    EXPECT_FALSE(evt_c.getDeadline());
+    EXPECT_FALSE(evt_d.getDeadline());
 
     // Drop the second event and ensure it is removed from the tree immediately.
     SteadyClockMock::advance(1050ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 13'050ms);
-    EXPECT_TRUE(evt_b->getDeadline());
-    evt_b->cancel();
-    EXPECT_FALSE(evt_b->getDeadline());     // Unregistered, cleared.
-    EXPECT_THAT(evl->getTree().size(), 1);  // Freed already.
-    evt_b->cancel();                        // Idempotency.
-    EXPECT_FALSE(evt_b->getDeadline());     // Ditto.
-    EXPECT_THAT(evl->getTree().size(), 1);  // Ditto.
-    out = evl->spin();
-    // semihost::log(__LINE__, " ", out);
+    EXPECT_TRUE(evt_b.getDeadline());
+    evt_b.cancel();
+    EXPECT_FALSE(evt_b.getDeadline());     // Unregistered, cleared.
+    EXPECT_THAT(evl.getTree().size(), 1);  // Freed already.
+    evt_b.cancel();                        // Idempotency.
+    EXPECT_FALSE(evt_b.getDeadline());     // Ditto.
+    EXPECT_THAT(evl.getTree().size(), 1);  // Ditto.
+    out = evl.spin();
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 14'000ms);  // B removed so the next one is A.
     EXPECT_THAT(out.worst_lateness, 50ms);
     EXPECT_THAT(out.approx_now.time_since_epoch(), 13'050ms);
-    EXPECT_THAT(evl->getTree()[0U]->getDeadline().value().time_since_epoch(), 14'000ms);
-    EXPECT_THAT(1, evl->getTree().size());  // Second dropped.
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 14'000ms);
+    EXPECT_THAT(1, evl.getTree().size());  // Second dropped.
     EXPECT_TRUE(a);
     EXPECT_THAT(a.value().deadline.time_since_epoch(), 13'000ms);
     EXPECT_FALSE(b);
@@ -236,8 +208,7 @@ TEST(TestOlgScheduler, EventLoopBasic)
     a.reset();
 
     // Nothing to do yet.
-    out = evl->spin();
-    // semihost::log(__LINE__, " ", out);
+    out = evl.spin();
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 14'000ms);  // Same up.
     EXPECT_THAT(out.worst_lateness, 0ms);
     EXPECT_THAT(out.approx_now.time_since_epoch(), 13'050ms);
@@ -245,15 +216,6 @@ TEST(TestOlgScheduler, EventLoopBasic)
     EXPECT_FALSE(b);
     EXPECT_FALSE(c);
     EXPECT_FALSE(d);
-
-    // Ensure the memory is properly reclaimed and there have been no OOMs.
-    // semihost::log("Alloc before dtors: ", platform::heap::getDiagnostics().allocated);
-    evt_a.reset();
-    evt_b.reset();
-    evt_c.reset();
-    evt_d.reset();
-    evl.reset();  // The destructor would panic unless all events are destroyed.
-    // semihost::log("Alloc after dtors: ", platform::heap::getDiagnostics().allocated);
 }
 
 TEST(TestOlgScheduler, EventLoopTotalOrdering)
@@ -262,35 +224,24 @@ TEST(TestOlgScheduler, EventLoopTotalOrdering)
 
     SteadyClockMock::reset();
     EventLoop<SteadyClockMock> evl;
-    std::uint8_t               a      = 0;
-    std::uint8_t               b      = 0;
-    std::uint8_t               c      = 0;
-    const auto                 report = [&](const auto tp, const char* const letter) {
-        (void) tp;
-        (void) letter;
-        // semihost::log(tp, " ", letter, "! a=", a, " b=", b, " c=", c);  //
-    };
-    const auto evt_a = evl.repeat(10ms, [&](auto tp) {
-        report(tp, "A");
+    std::uint8_t               a     = 0;
+    std::uint8_t               b     = 0;
+    std::uint8_t               c     = 0;
+    const auto                 evt_a = evl.repeat(10ms, [&](const auto&) {
         a++;
         EXPECT_THAT(a, Gt(b));
         EXPECT_THAT(a, Gt(c));
     });
-    EXPECT_THAT(evt_a, NotNull());
-    const auto evt_b = evl.repeat(10ms, [&](auto tp) {
-        report(tp, "B");
+    const auto                 evt_b = evl.repeat(10ms, [&](const auto&) {
         b++;
         EXPECT_THAT(b, Le(a));
         EXPECT_THAT(b, Gt(c));
     });
-    EXPECT_THAT(evt_b, NotNull());
-    const auto evt_c = evl.repeat(10ms, [&](auto tp) {
-        report(tp, "C");
+    const auto                 evt_c = evl.repeat(10ms, [&](const auto&) {
         c++;
         EXPECT_THAT(c, Le(a));
         EXPECT_THAT(c, Le(b));
     });
-    EXPECT_THAT(evt_c, NotNull());
     SteadyClockMock::advance(50ms);
     (void) evl.spin();
     EXPECT_THAT(a, 5);
@@ -305,16 +256,12 @@ TEST(TestOlgScheduler, EventLoopPoll)
     SteadyClockMock::reset();
     EventLoop<SteadyClockMock> evl;
 
-    EXPECT_THAT(evl.poll(0ms, [&](auto) {}), IsNull());  // Period shall be positive.
-    EXPECT_TRUE(evl.isEmpty());
-
     std::optional<time_point> last_tp{};
     SteadyClockMock::advance(100ms);
-    auto evt = evl.poll(10ms, [&](const auto tp) {
+    auto evt = evl.poll(10ms, [&](const auto& arg) {
         EXPECT_FALSE(last_tp);
-        last_tp = tp.deadline;
+        last_tp = arg.deadline;
     });
-    EXPECT_THAT(evt, NotNull());
     EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 110ms);
 
     SteadyClockMock::advance(30ms);
@@ -341,8 +288,7 @@ TEST(TestOlgScheduler, EventLoopDefer_single_overdue)
     SteadyClockMock::reset();
     EventLoop<SteadyClockMock> evl;
 
-    auto evt = evl.defer(SteadyClockMock::now() + 1000ms, [&](auto) {});
-    EXPECT_TRUE(evt);
+    auto evt = evl.defer(SteadyClockMock::now() + 1000ms, [](const auto&) {});
 
     // This is special case - only one deferred event (and no "repeat"-s!), and it is already overdue (by +30ms).
     // So, `next_deadline` should be `time_point::max()` b/c there will be nothing left pending after spin.
@@ -384,15 +330,24 @@ TEST(TestOlgScheduler, EventLoopDefer_long_running_callback)
 
 TEST(TestOlgScheduler, HandleMovement)
 {
+    using duration = SteadyClockMock::duration;
     using std::chrono_literals::operator""ms;
 
     SteadyClockMock::reset();
 
     EventLoop<SteadyClockMock> evl;
 
-    auto a = evl.repeat(100ms, [&](auto) {});
-    auto b = evl.repeat(103ms, [&](auto) {});
-    auto c = evl.repeat(107ms, [&](auto) {});
+    std::vector<std::tuple<std::string, duration, duration>> calls;
+
+    std::optional a = evl.repeat(330ms, [&](const auto& arg) {
+        calls.emplace_back("a", arg.deadline.time_since_epoch(), arg.approx_now.time_since_epoch());
+    });
+    std::optional b = evl.repeat(333ms, [&](const auto& arg) {
+        calls.emplace_back("b", arg.deadline.time_since_epoch(), arg.approx_now.time_since_epoch());
+    });
+    std::optional c = evl.repeat(337ms, [&](const auto& arg) {
+        calls.emplace_back("c", arg.deadline.time_since_epoch(), arg.approx_now.time_since_epoch());
+    });
     EXPECT_THAT(evl.getTree().size(), 3);
 
     SteadyClockMock::advance(1000ms);
@@ -401,27 +356,48 @@ TEST(TestOlgScheduler, HandleMovement)
     EXPECT_FALSE(a);
     (void) evl.spin();
     EXPECT_THAT(evl.getTree().size(), 2);
+    EXPECT_THAT(calls,
+                ElementsAre(std::make_tuple("b", 333ms * 1, 1000ms),  //
+                            std::make_tuple("c", 337ms * 1, 1000ms),
+                            std::make_tuple("b", 333ms * 2, 1000ms),
+                            std::make_tuple("c", 337ms * 2, 1000ms),
+                            std::make_tuple("b", 333ms * 3, 1000ms)));
+    calls.clear();
 
-    EXPECT_THAT(b.get(), NotNull());
+    EXPECT_TRUE(b);
     auto d = std::move(b);  // b moved into d
-    EXPECT_THAT(d.get(), NotNull());
+    EXPECT_TRUE(d);
 
     SteadyClockMock::advance(1000ms);
     (void) evl.spin();
     EXPECT_THAT(evl.getTree().size(), 2);  // No change -- references moved but inferiors are kept alive.
+    EXPECT_THAT(calls,
+                ElementsAre(std::make_tuple("c", 337ms * 3, 2000ms),
+                            std::make_tuple("b", 333ms * 4, 2000ms),
+                            std::make_tuple("c", 337ms * 4, 2000ms),
+                            std::make_tuple("b", 333ms * 5, 2000ms),
+                            std::make_tuple("c", 337ms * 5, 2000ms),
+                            std::make_tuple("b", 333ms * 6, 2000ms)));
+    calls.clear();
 
-    EXPECT_THAT(d.get(), NotNull());
-    c = std::move(d);  // d moved into c, c destroyed.
-    EXPECT_THAT(c.get(), NotNull());
+    EXPECT_TRUE(c);
+    c.reset();  // Destroy c
+    EXPECT_FALSE(c);
 
     SteadyClockMock::advance(1000ms);
     (void) evl.spin();
-    EXPECT_THAT(evl.getTree().size(), 1);  // c destroyed, only b left alive (now in c).
+    EXPECT_THAT(evl.getTree().size(), 1);  // c destroyed, only b left alive (now in d).
+    EXPECT_THAT(calls,
+                ElementsAre(std::make_tuple("b", 333ms * 7, 3000ms),
+                            std::make_tuple("b", 333ms * 8, 3000ms),
+                            std::make_tuple("b", 333ms * 9, 3000ms)));
+    calls.clear();
 
-    c.reset();
+    d.reset();
     SteadyClockMock::advance(1000ms);
     (void) evl.spin();
     EXPECT_THAT(evl.getTree().size(), 0);
+    EXPECT_THAT(calls, IsEmpty());
 }
 
 }  // namespace olg_scheduler::verification

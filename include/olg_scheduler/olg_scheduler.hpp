@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include <cavl/cavl.hpp>
-#include <platform/heap.hpp>
+#include <cavl.hpp>
 
 #include <cassert>
 #include <chrono>
 #include <concepts>
 #include <optional>
+#include <utility>
 #include <variant>
 
 namespace olg_scheduler
@@ -48,10 +48,10 @@ struct Arg final
 template <typename Fun, typename TimePoint>
 concept Callback = std::invocable<Fun, const Arg<TimePoint>&>;
 
-/// Events are created by the event loop on the heap using the factory methods and returned by pointer.
+/// Events are created on the stack.
 /// The caller can destroy the event at any time, which will automatically cancel and remove it from the event loop.
-/// If the event is single-shot or is otherwise canceled, the event object will keep lingering on the heap
-/// until destroyed by the user.
+/// If the event is single-shot or is otherwise canceled, the event object will keep lingering on the stack
+/// until destroyed by the user (f.e. by `reset`-ing an optional which holds it).
 ///
 /// The events are guaranteed to be executed strictly in the order of their deadlines;
 /// equal deadlines are resolved strictly in the order of their registration (first registered -- first executed).
@@ -62,7 +62,7 @@ concept Callback = std::invocable<Fun, const Arg<TimePoint>&>;
 /// The time complexity of all operations is logarithmic of the number of registered events.
 ///
 /// Events shall not outlive the event loop.
-/// Event handles shall not be destroyed from callbacks.
+/// Events could be created, cancelled or destroyed from callbacks (even for themselves).
 template <typename TimePoint>
 class Event : private cavl::Node<Event<TimePoint>>
 {
@@ -70,20 +70,9 @@ class Event : private cavl::Node<Event<TimePoint>>
     friend class cavl::Tree<Event>;  // otherwise, we would have to use public inheritance, which is undesirable.
 
 public:
-    Event(const Event&)            = delete;
-    Event(Event&&)                 = delete;
-    Event& operator=(const Event&) = delete;
-    Event& operator=(Event&&)      = delete;
-
-    /// The event can be safely destroyed at any time.
-    /// It will be automatically canceled and removed from the event loop.
-    virtual ~Event()
-    {
-        cancel();
-        assert(!deadline_.has_value());
-        assert((this->getChildNode(false) == nullptr) && (this->getChildNode(true) == nullptr) &&
-               (this->getParentNode() == nullptr));
-    }
+    Event(const Event&)                      = delete;
+    Event& operator=(const Event&)           = delete;
+    Event& operator=(Event&& other) noexcept = delete;
 
     /// Cease future activities. No-op if not scheduled.
     /// It is safe to call this method more than once.
@@ -96,7 +85,7 @@ public:
         {
             // Removing a non-existent node from the tree is an UB that may lead to memory corruption,
             // so we have to check first if the event is actually registered.
-            tree_.remove(this);
+            remove();
             // This is used to mark the event as unregistered so we don't double-remove it.
             // This can only be done after the event is removed from the tree.
             deadline_.reset();
@@ -109,17 +98,35 @@ public:
     [[nodiscard]] std::optional<TimePoint> getDeadline() const noexcept { return deadline_; }
 
 protected:
+    using Tree = cavl::Tree<Event>;
+    using cavl::Node<Event>::remove;
+
     /// The event is not automatically scheduled, it must be explicitly scheduled by the user.
-    explicit Event(cavl::Tree<Event>& tree) : tree_(tree) {}
+    Event() = default;
+
+    /// The event can be safely destroyed at any time.
+    /// It will be automatically canceled and removed from the event loop.
+    virtual ~Event()
+    {
+        cancel();
+        assert(!deadline_.has_value());
+        assert((this->getChildNode(false) == nullptr) && (this->getChildNode(true) == nullptr) &&
+               (this->getParentNode() == nullptr));
+    }
+
+    Event(Event&& other) noexcept :
+        cavl::Node<Event>{std::move(static_cast<cavl::Node<Event>&>(other))},
+        deadline_{std::exchange(other.deadline_, std::nullopt)}
+    {}
 
     /// Ensure the event is in the tree and set the deadline to the specified absolute time point.
     /// If the event is already scheduled, the old deadline is overwritten.
     /// It is guaranteed that while an event resides in the tree, it has a valid deadline set.
-    void schedule(const TimePoint dead) noexcept
+    void schedule(const TimePoint dead, Tree& tree) noexcept
     {
         cancel();
         deadline_               = dead;  // The deadline shall be set before the event is inserted into the tree.
-        const auto ptr_existing = tree_.search(
+        const auto ptr_existing = tree.search(
             [dead](const Event& other) {
                 /// No two deadlines compare equal, which allows us to have multiple nodes with the same deadline in
                 /// the tree. With two nodes sharing the same deadline, the one added later is considered to be later.
@@ -135,16 +142,11 @@ protected:
     /// (otherwise it will keep firing in a tight loop).
     /// If the event needs to be re-scheduled automatically, it must be done before the user callback is invoked,
     /// because the user may choose to cancel the event from the callback.
-    virtual void execute(const Arg<TimePoint>& args) = 0;
+    virtual void execute(const Arg<TimePoint>& args, Tree& tree) = 0;
 
 private:
-    cavl::Tree<Event>&       tree_;
     std::optional<TimePoint> deadline_;
 };
-
-/// A helper alias for convenience.
-template <typename TimePoint>
-using EventPtr = platform::heap::UniquePtr<Event<TimePoint>>;
 
 /// This information is returned by the spin() method to allow the caller to decide what to do next
 /// and assess the temporal performance of the event loop.
@@ -169,7 +171,7 @@ struct SpinResult final
 /// The event loop is used to execute activities at the specified time, either once or periodically.
 /// The event handler callbacks are invoked with one argument of type Arg<Clock::time_point>.
 /// The event loop shall outlive the events it manages.
-/// Each factory method returns a smart pointer to the event object,
+/// Each factory method returns an event object by value,
 /// which can be used to cancel the event by destroying it.
 /// The time complexity of all operations is logarithmic of the number of registered events.
 template <typename Clock>
@@ -186,52 +188,49 @@ private:
     class EventProxy : public Event<time_point>
     {
     public:
-        explicit EventProxy(EventLoop& owner) : Event<time_point>(owner.tree_) {}
         using Event<time_point>::execute;
     };
 
 public:
-    EventLoop()                 = default;
-    EventLoop(const EventLoop&) = delete;
-    EventLoop(EventLoop&&)      = delete;
+    EventLoop() = default;
 
-    ~EventLoop() noexcept
+    EventLoop(const EventLoop&)                = delete;
+    EventLoop(EventLoop&&) noexcept            = delete;
+    EventLoop& operator=(const EventLoop&)     = delete;
+    EventLoop& operator=(EventLoop&&) noexcept = delete;
+
+    ~EventLoop()
     {
         // If this fails, it means that some events have outlived the event loop, which is not permitted.
         assert(isEmpty());
     }
 
-    EventLoop& operator=(const EventLoop&) = delete;
-    EventLoop& operator=(EventLoop&&)      = delete;
-
     /// The provided handler will be invoked with the specified interval starting from (now + period);
     /// if you also need to invoke it immediately, consider using defer().
     /// Returns the event handle on success, empty if out of memory or invalid inputs.
     template <Callback<time_point> Fun>
-    [[nodiscard]] EventPtr<time_point> repeat(const duration period, Fun&& handler)
+    [[nodiscard]] auto repeat(const duration period, Fun&& handler)
     {
         class Impl final : public EventProxy
         {
         public:
-            Impl(EventLoop& owner, const duration per, const Fun& fun) : EventProxy(owner), period_(per), handler_(fun)
+            Impl(EventLoop& owner, const duration per, Fun&& fun) : period_{per}, handler_{std::move(fun)}
             {
-                this->schedule(Clock::now() + period_);
-            }
-            void execute(const Arg<time_point>& args) final
-            {
-                this->schedule(args.deadline + period_);  // Strict period advancement, no phase error growth.
-                handler_(args);
+                this->schedule(Clock::now() + period_, owner.tree_);
             }
 
         private:
+            void execute(const Arg<time_point>& args, Tree& tree) override
+            {
+                this->schedule(args.deadline + period_, tree);  // Strict period advancement, no phase error growth.
+                handler_(args);
+            }
+
             const duration period_;
-            Fun            handler_;
+            const Fun      handler_;
         };
-        if (period > duration::zero())
-        {
-            return platform::heap::construct<Impl>(*this, period, std::forward<Fun>(handler));
-        }
-        return {};
+        assert(period > duration::zero());
+        return Impl{*this, period, std::forward<Fun>(handler)};
     }
 
     /// This is like repeat() with one crucial difference: the next deadline is defined not as (deadline+period),
@@ -241,55 +240,53 @@ public:
     /// like interface polling or similar. Because the scheduler is allowed to let the phase slip, this type of event
     /// will automatically reduce the activation rate if the scheduler is CPU-starved, thus providing load regulation.
     template <Callback<time_point> Fun>
-    [[nodiscard]] EventPtr<time_point> poll(const duration min_period, Fun&& handler)
+    [[nodiscard]] auto poll(const duration min_period, Fun&& handler)
     {
         class Impl final : public EventProxy
         {
         public:
-            Impl(EventLoop& owner, const duration per, const Fun& fun) :
-                EventProxy(owner), min_period_(per), handler_(fun)
+            Impl(EventLoop& owner, const duration per, Fun&& fun) : min_period_{per}, handler_{std::move(fun)}
             {
-                this->schedule(Clock::now() + min_period_);
-            }
-            void execute(const Arg<time_point>& args) final
-            {
-                this->schedule(args.approx_now + min_period_);  // Accumulate phase error intentionally.
-                handler_(args);
+                this->schedule(Clock::now() + min_period_, owner.tree_);
             }
 
         private:
+            void execute(const Arg<time_point>& args, Tree& tree) override
+            {
+                this->schedule(args.approx_now + min_period_, tree);  // Accumulate phase error intentionally.
+                handler_(args);
+            }
+
             const duration min_period_;
-            Fun            handler_;
+            const Fun      handler_;
         };
-        if (min_period > duration::zero())
-        {
-            return platform::heap::construct<Impl>(*this, min_period, std::forward<Fun>(handler));
-        }
-        return {};
+        assert(min_period > duration::zero());
+        return Impl{*this, min_period, std::forward<Fun>(handler)};
     }
 
     /// Like repeat() but the handler will be invoked only once and the event is canceled afterward.
     /// The deadline may be in the past, in which case the event will fire ASAP.
     template <Callback<time_point> Fun>
-    [[nodiscard]] EventPtr<time_point> defer(const time_point deadline, Fun&& handler)
+    [[nodiscard]] auto defer(const time_point deadline, Fun&& handler)
     {
         class Impl final : public EventProxy
         {
         public:
-            Impl(EventLoop& owner, const time_point deadline, const Fun& fun) : EventProxy(owner), handler_(fun)
+            Impl(EventLoop& owner, const time_point deadline, Fun&& fun) : handler_{std::move(fun)}
             {
-                this->schedule(deadline);
+                this->schedule(deadline, owner.tree_);
             }
-            void execute(const Arg<time_point>& args) final
+
+        private:
+            void execute(const Arg<time_point>& args, Tree&) override
             {
                 this->cancel();
                 handler_(args);
             }
 
-        private:
-            Fun handler_;
+            const Fun handler_;
         };
-        return platform::heap::construct<Impl>(*this, deadline, std::forward<Fun>(handler));
+        return Impl{*this, deadline, std::forward<Fun>(handler)};
     }
 
     /// Execute pending events strictly in the order of their deadlines until there are no pending events left.
@@ -326,7 +323,7 @@ public:
             {
                 ExecutionMonitor monitor{};  // RAII indication of the start and end of the event execution.
                 // Execution will remove the event from the tree and then possibly re-insert it with a new deadline.
-                evt->execute({.event = *evt, .deadline = deadline, .approx_now = result.approx_now});
+                evt->execute({.event = *evt, .deadline = deadline, .approx_now = result.approx_now}, tree_);
                 (void) monitor;
             }
             result.next_deadline  = time_point::max();  // Reset the next deadline to the maximum possible value.
@@ -346,7 +343,9 @@ public:
     const auto& getTree() const noexcept { return tree_; }
 
 private:
-    cavl::Tree<Event<time_point>> tree_;
+    using Tree = cavl::Tree<Event<time_point>>;
+
+    Tree tree_;
 
 };  // EventLoop
 

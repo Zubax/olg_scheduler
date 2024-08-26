@@ -1,4 +1,4 @@
-/// Source: https://github.com/serges147/embedded_scheduler
+/// Source: https://github.com/zubax/olg_scheduler
 ///
 /// Copyright (c) 2024 Zubax Robotics  <info@zubax.com>
 ///

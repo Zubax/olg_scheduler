@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <cavl/cavl.hpp>
+#include <cavl.hpp>
 
 #include <cassert>
 #include <chrono>

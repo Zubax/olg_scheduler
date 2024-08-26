@@ -1,6 +1,6 @@
 # olg_scheduler
 
-[![Main Workflow](https://github.com/serges147/embedded_scheduler/actions/workflows/main.yml/badge.svg)](https://github.com/serges147/embedded_scheduler/actions/workflows/main.yml)
+[![Main Workflow](https://github.com/zubax/olg_scheduler/actions/workflows/main.yml/badge.svg)](https://github.com/zubax/olg_scheduler/actions/workflows/main.yml)
 
 Generic single-file implementation of scheduler suitable for deeply embedded systems.
 "OLG" happens to be an abbreviation of Okay Let's Go

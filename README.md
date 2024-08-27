@@ -3,7 +3,7 @@
 [![Main Workflow](https://github.com/zubax/olg_scheduler/actions/workflows/main.yml/badge.svg)](https://github.com/zubax/olg_scheduler/actions/workflows/main.yml)
 
 Generic single-file implementation of scheduler suitable for deeply embedded systems.
-"OLG" happens to be an abbreviation of Okay Let's Go
+"OLG" happens to be an abbreviation of [Okay Let's Go](https://www.youtube.com/watch?v=Jo6fKboqfMs)
 and also a reference to the fact that it has a logarithmic asymptotic complexity.
 **Simply copy `olg_scheduler.hpp` into your project tree and you are ready to roll.**
 The only dependency is the CAVL (`cavl.hpp`) header-only library

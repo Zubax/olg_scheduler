@@ -97,6 +97,7 @@ public:
     /// It is guaranteed that while an event resides in the tree, it has a valid deadline set.
     [[nodiscard]] std::optional<TimePoint> getDeadline() const noexcept { return deadline_; }
 
+    // This method is necessary to store an Event in cetl::unbounded_variant
     static constexpr std::array<std::uint8_t, 16> _get_type_id_() noexcept
     {
         return {0xB6, 0x87, 0x48, 0xA6, 0x7A, 0xDB, 0x4D, 0xF1, 0xB3, 0x1D, 0xA9, 0x8D, 0x50, 0xA7, 0x82, 0x47};

@@ -97,6 +97,11 @@ public:
     /// It is guaranteed that while an event resides in the tree, it has a valid deadline set.
     [[nodiscard]] std::optional<TimePoint> getDeadline() const noexcept { return deadline_; }
 
+    static constexpr std::array<std::uint8_t, 16> _get_type_id_() noexcept
+    {
+        return {0xB6, 0x87, 0x48, 0xA6, 0x7A, 0xDB, 0x4D, 0xF1, 0xB3, 0x1D, 0xA9, 0x8D, 0x50, 0xA7, 0x82, 0x47};
+    }
+
 protected:
     using Tree = cavl::Tree<Event>;
     using cavl::Node<Event>::remove;
@@ -189,6 +194,7 @@ private:
     {
     public:
         using Event<time_point>::execute;
+        using Event<time_point>::_get_type_id_;
     };
 
 public:
@@ -218,6 +224,8 @@ public:
             {
                 this->schedule(Clock::now() + period_, owner.tree_);
             }
+
+            using EventProxy::_get_type_id_;
 
         private:
             void execute(const Arg<time_point>& args, Tree& tree) override
@@ -250,6 +258,8 @@ public:
                 this->schedule(Clock::now() + min_period_, owner.tree_);
             }
 
+            using EventProxy::_get_type_id_;
+
         private:
             void execute(const Arg<time_point>& args, Tree& tree) override
             {
@@ -276,6 +286,8 @@ public:
             {
                 this->schedule(deadline, owner.tree_);
             }
+
+            using EventProxy::_get_type_id_;
 
         private:
             void execute(const Arg<time_point>& args, Tree&) override

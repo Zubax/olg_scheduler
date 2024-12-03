@@ -34,6 +34,7 @@ using testing::Ne;
 using testing::IsNull;
 using testing::IsEmpty;
 using testing::ElementsAre;
+using testing::ElementsAreArray;
 
 // NOLINTBEGIN(bugprone-unchecked-optional-access)
 // NOLINTBEGIN(readability-function-cognitive-complexity, misc-const-correctness)
@@ -109,7 +110,7 @@ TEST(TestOlgScheduler, EventLoopBasic)
 
     // Check the type ID of return type repeat().
     const auto actual_type_id = decltype(evt_a)::_get_type_id_();
-    EXPECT_THAT(actual_type_id, testing::ElementsAreArray(expected_type_id));
+    EXPECT_THAT(actual_type_id, ElementsAreArray(expected_type_id));
 
     auto evt_b = evl.repeat(100ms,  // Smaller deadline goes on the left.
                             [&](const auto& arg) { b.emplace(arg); });
@@ -274,7 +275,7 @@ TEST(TestOlgScheduler, EventLoopPoll)
 
     // Check the type ID of return type poll().
     const auto actual_type_id = decltype(evt)::_get_type_id_();
-    EXPECT_THAT(actual_type_id, testing::ElementsAreArray(expected_type_id));
+    EXPECT_THAT(actual_type_id, ElementsAreArray(expected_type_id));
 
     SteadyClockMock::advance(30ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 130ms);
@@ -304,7 +305,7 @@ TEST(TestOlgScheduler, EventLoopDefer_single_overdue)
 
     // Check the type ID of return type defer().
     const auto actual_type_id = decltype(evt)::_get_type_id_();
-    EXPECT_THAT(actual_type_id, testing::ElementsAreArray(expected_type_id));
+    EXPECT_THAT(actual_type_id, ElementsAreArray(expected_type_id));
 
     // This is special case - only one deferred event (and no "repeat"-s!), and it is already overdue (by +30ms).
     // So, `next_deadline` should be `time_point::max()` b/c there will be nothing left pending after spin.

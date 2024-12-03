@@ -42,6 +42,10 @@ using testing::ElementsAre;
 namespace
 {
 
+/// Expected type ID for the type returned from repeat(), poll() and defer().
+constexpr std::array<std::uint8_t, 16> expected_type_id =
+    {0xB6, 0x87, 0x48, 0xA6, 0x7A, 0xDB, 0x4D, 0xF1, 0xB3, 0x1D, 0xA9, 0x8D, 0x50, 0xA7, 0x82, 0x47};
+
 /// This clock has to keep global state to implement the TrivialClock trait.
 class SteadyClockMock final
 {
@@ -102,6 +106,10 @@ TEST(TestOlgScheduler, EventLoopBasic)
     EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 11'000ms);
     EXPECT_THAT(evl.getTree()[1U], IsNull());
     EXPECT_FALSE(evl.isEmpty());
+
+    // Check the type ID of return type repeat().
+    const auto actual_type_id = decltype(evt_a)::_get_type_id_();
+    EXPECT_THAT(actual_type_id, testing::ElementsAreArray(expected_type_id));
 
     auto evt_b = evl.repeat(100ms,  // Smaller deadline goes on the left.
                             [&](const auto& arg) { b.emplace(arg); });
@@ -264,6 +272,10 @@ TEST(TestOlgScheduler, EventLoopPoll)
     });
     EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 110ms);
 
+    // Check the type ID of return type poll().
+    const auto actual_type_id = decltype(evt)::_get_type_id_();
+    EXPECT_THAT(actual_type_id, testing::ElementsAreArray(expected_type_id));
+
     SteadyClockMock::advance(30ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 130ms);
     (void) evl.spin();
@@ -289,6 +301,10 @@ TEST(TestOlgScheduler, EventLoopDefer_single_overdue)
     EventLoop<SteadyClockMock> evl;
 
     auto evt = evl.defer(SteadyClockMock::now() + 1000ms, [](const auto&) {});
+
+    // Check the type ID of return type defer().
+    const auto actual_type_id = decltype(evt)::_get_type_id_();
+    EXPECT_THAT(actual_type_id, testing::ElementsAreArray(expected_type_id));
 
     // This is special case - only one deferred event (and no "repeat"-s!), and it is already overdue (by +30ms).
     // So, `next_deadline` should be `time_point::max()` b/c there will be nothing left pending after spin.

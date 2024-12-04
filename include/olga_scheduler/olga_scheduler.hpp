@@ -1,4 +1,4 @@
-/// Source: https://github.com/zubax/olg_scheduler
+/// Source: https://github.com/zubax/olga_scheduler
 ///
 /// Copyright (c) 2024 Zubax Robotics  <info@zubax.com>
 ///
@@ -26,7 +26,7 @@
 #include <utility>
 #include <variant>
 
-namespace olg_scheduler
+namespace olga_scheduler
 {
 
 template <typename TimePoint>
@@ -362,4 +362,4 @@ private:
 
 };  // EventLoop
 
-}  // namespace olg_scheduler
+}  // namespace olga_scheduler

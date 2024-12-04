@@ -198,11 +198,11 @@ TEST(TestOlgaScheduler, EventLoopBasic)
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 13'050ms);
     EXPECT_TRUE(evt_b.getDeadline() > Loop::time_point::min());
     evt_b.cancel();
-    EXPECT_THAT(evt_b.getDeadline(), Loop::time_point::min());     // Unregistered, cleared.
-    EXPECT_THAT(evl.getTree().size(), 1);  // Freed already.
-    evt_b.cancel();                        // Idempotency.
-    EXPECT_THAT(evt_b.getDeadline(), Loop::time_point::min());     // Ditto.
-    EXPECT_THAT(evl.getTree().size(), 1);  // Ditto.
+    EXPECT_THAT(evt_b.getDeadline(), Loop::time_point::min());  // Unregistered, cleared.
+    EXPECT_THAT(evl.getTree().size(), 1);                       // Freed already.
+    evt_b.cancel();                                             // Idempotency.
+    EXPECT_THAT(evt_b.getDeadline(), Loop::time_point::min());  // Ditto.
+    EXPECT_THAT(evl.getTree().size(), 1);                       // Ditto.
     out = evl.spin();
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 14'000ms);  // B removed so the next one is A.
     EXPECT_THAT(out.worst_lateness, 50ms);

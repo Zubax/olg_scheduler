@@ -151,7 +151,7 @@ protected:
     virtual void execute(const Arg<TimePoint>& args, Tree& tree) = 0;
 
 private:
-    TimePoint deadline_=TimePoint::min();
+    TimePoint deadline_ = TimePoint::min();
 };
 
 /// This information is returned by the spin() method to allow the caller to decide what to do next

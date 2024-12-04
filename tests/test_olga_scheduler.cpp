@@ -1,4 +1,4 @@
-/// Source: https://github.com/zubax/olg_scheduler
+/// Source: https://github.com/zubax/olga_scheduler
 ///
 /// Copyright (c) 2024 Zubax Robotics  <info@zubax.com>
 ///
@@ -15,7 +15,7 @@
 /// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "olg_scheduler.hpp"
+#include "olga_scheduler.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -75,10 +75,10 @@ public:
 
 }  // namespace
 
-namespace olg_scheduler::verification
+namespace olga_scheduler::verification
 {
 
-TEST(TestOlgScheduler, EventLoopBasic)
+TEST(TestOlgaScheduler, EventLoopBasic)
 {
     using std::chrono_literals::operator""ms;
 
@@ -227,7 +227,7 @@ TEST(TestOlgScheduler, EventLoopBasic)
     EXPECT_FALSE(d);
 }
 
-TEST(TestOlgScheduler, EventLoopTotalOrdering)
+TEST(TestOlgaScheduler, EventLoopTotalOrdering)
 {
     using std::chrono_literals::operator""ms;
 
@@ -258,7 +258,7 @@ TEST(TestOlgScheduler, EventLoopTotalOrdering)
     EXPECT_THAT(c, 5);
 }
 
-TEST(TestOlgScheduler, EventLoopPoll)
+TEST(TestOlgaScheduler, EventLoopPoll)
 {
     using time_point = SteadyClockMock::time_point;
     using std::chrono_literals::operator""ms;
@@ -294,7 +294,7 @@ TEST(TestOlgScheduler, EventLoopPoll)
     EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 210ms);  // Skipped ahead!
 }
 
-TEST(TestOlgScheduler, EventLoopDefer_single_overdue)
+TEST(TestOlgaScheduler, EventLoopDefer_single_overdue)
 {
     using time_point = SteadyClockMock::time_point;
     using std::chrono_literals::operator""ms;
@@ -316,7 +316,7 @@ TEST(TestOlgScheduler, EventLoopDefer_single_overdue)
     EXPECT_THAT(out.approx_now.time_since_epoch(), 1030ms);
 }
 
-TEST(TestOlgScheduler, EventLoopDefer_long_running_callback)
+TEST(TestOlgaScheduler, EventLoopDefer_long_running_callback)
 {
     using duration = SteadyClockMock::duration;
     using std::chrono_literals::operator""ms;
@@ -345,7 +345,7 @@ TEST(TestOlgScheduler, EventLoopDefer_long_running_callback)
                             std::make_tuple("b", 20ms, 100ms)));
 }
 
-TEST(TestOlgScheduler, HandleMovement)
+TEST(TestOlgaScheduler, HandleMovement)
 {
     using duration = SteadyClockMock::duration;
     using std::chrono_literals::operator""ms;
@@ -417,7 +417,7 @@ TEST(TestOlgScheduler, HandleMovement)
     EXPECT_THAT(calls, IsEmpty());
 }
 
-}  // namespace olg_scheduler::verification
+}  // namespace olga_scheduler::verification
 
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 // NOLINTEND(readability-function-cognitive-complexity, misc-const-correctness)

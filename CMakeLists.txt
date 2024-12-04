@@ -2,7 +2,7 @@
 # Copyright (c) 2024 Zubax Robotics  <info@zubax.com>
 
 cmake_minimum_required(VERSION 3.12)
-project(olg_scheduler_tests C CXX)
+project(olga_scheduler_tests C CXX)
 enable_testing()
 
 set(CTEST_OUTPUT_ON_FAILURE ON)
@@ -47,14 +47,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wsign-conversion -Wcast-align -Wmissing
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wtype-limits -Wnon-virtual-dtor -Woverloaded-virtual")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
 
-add_executable(test_olg_scheduler_cpp20 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_olg_scheduler.cpp)
-set_target_properties(test_olg_scheduler_cpp20 PROPERTIES CXX_STANDARD 20)
-target_include_directories(test_olg_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olg_scheduler)
-target_include_directories(test_olg_scheduler_cpp20 SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
-target_link_libraries(test_olg_scheduler_cpp20
+add_executable(test_olga_scheduler_cpp20 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_olga_scheduler.cpp)
+set_target_properties(test_olga_scheduler_cpp20 PROPERTIES CXX_STANDARD 20)
+target_include_directories(test_olga_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(test_olga_scheduler_cpp20 SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_link_libraries(test_olga_scheduler_cpp20
         PRIVATE
         GTest::gmock_main
 )
 
 include(GoogleTest)
-gtest_discover_tests(test_olg_scheduler_cpp20)
+gtest_discover_tests(test_olga_scheduler_cpp20)

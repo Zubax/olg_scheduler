@@ -93,7 +93,7 @@ public:
     }
 
     /// Diagnostic accessor for testing. Not intended for normal use.
-    /// The deadline is TimePoint::min() if the event is not scheduled or canceled.
+    /// The deadline is `TimePoint::min()` if the event is not scheduled or canceled.
     /// It is guaranteed that while an event resides in the tree, it has a valid deadline set.
     [[nodiscard]] TimePoint getDeadline() const noexcept { return deadline_; }
 

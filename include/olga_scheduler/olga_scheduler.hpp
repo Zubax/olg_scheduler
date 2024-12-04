@@ -81,21 +81,21 @@ public:
     void cancel() noexcept
     {
         /// It is guaranteed that while an event resides in the tree, it has a valid deadline set.
-        if (deadline_)
+        if (deadline_ != TimePoint::min())
         {
             // Removing a non-existent node from the tree is an UB that may lead to memory corruption,
             // so we have to check first if the event is actually registered.
             remove();
             // This is used to mark the event as unregistered so we don't double-remove it.
             // This can only be done after the event is removed from the tree.
-            deadline_.reset();
+            deadline_ = TimePoint::min();
         }
     }
 
     /// Diagnostic accessor for testing. Not intended for normal use.
-    /// Empty option means that the event is not scheduled or canceled.
+    /// The deadline is TimePoint::min() if the event is not scheduled or canceled.
     /// It is guaranteed that while an event resides in the tree, it has a valid deadline set.
-    [[nodiscard]] std::optional<TimePoint> getDeadline() const noexcept { return deadline_; }
+    [[nodiscard]] TimePoint getDeadline() const noexcept { return deadline_; }
 
     // This method is necessary to store an Event in cetl::unbounded_variant
     static constexpr std::array<std::uint8_t, 16> _get_type_id_() noexcept
@@ -115,14 +115,14 @@ protected:
     virtual ~Event()
     {
         cancel();
-        assert(!deadline_.has_value());
+        assert(deadline_ == TimePoint::min());
         assert((this->getChildNode(false) == nullptr) && (this->getChildNode(true) == nullptr) &&
                (this->getParentNode() == nullptr));
     }
 
     Event(Event&& other) noexcept :
         cavl::Node<Event>{std::move(static_cast<cavl::Node<Event>&>(other))},
-        deadline_{std::exchange(other.deadline_, std::nullopt)}
+        deadline_{std::exchange(other.deadline_, TimePoint::min())}
     {}
 
     /// Ensure the event is in the tree and set the deadline to the specified absolute time point.
@@ -136,7 +136,7 @@ protected:
             [dead](const Event& other) {
                 /// No two deadlines compare equal, which allows us to have multiple nodes with the same deadline in
                 /// the tree. With two nodes sharing the same deadline, the one added later is considered to be later.
-                return (dead >= other.deadline_.value()) ? +1 : -1;
+                return (dead >= other.deadline_) ? +1 : -1;
             },
             [this] { return this; });
         assert(std::get<0>(ptr_existing) == this);
@@ -151,7 +151,7 @@ protected:
     virtual void execute(const Arg<TimePoint>& args, Tree& tree) = 0;
 
 private:
-    std::optional<TimePoint> deadline_;
+    TimePoint deadline_ = TimePoint::min();
 };
 
 /// This information is returned by the spin() method to allow the caller to decide what to do next
@@ -323,7 +323,7 @@ public:
         while (auto* const evt = static_cast<EventProxy*>(tree_.min()))
         {
             // The deadline is guaranteed to be set because it is in the tree.
-            const auto deadline = evt->getDeadline().value();
+            const auto deadline = evt->getDeadline();
             if (result.approx_now < deadline)  // Too early -- either we need to sleep or the time sample is obsolete.
             {
                 result.approx_now = Clock::now();  // The number of calls to Clock::now() is minimized.

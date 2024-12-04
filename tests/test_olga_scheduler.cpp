@@ -44,7 +44,7 @@ namespace
 {
 
 /// Expected type ID for the type returned from repeat(), poll() and defer().
-constexpr std::array<std::uint8_t, 16> expected_type_id =
+constexpr std::array<std::uint8_t, 16> event_type_id =
     {0xB6, 0x87, 0x48, 0xA6, 0x7A, 0xDB, 0x4D, 0xF1, 0xB3, 0x1D, 0xA9, 0x8D, 0x50, 0xA7, 0x82, 0x47};
 
 /// This clock has to keep global state to implement the TrivialClock trait.
@@ -104,37 +104,36 @@ TEST(TestOlgaScheduler, EventLoopBasic)
 
     // Register our handlers. Events with same deadline are ordered such that the one added later is processed later.
     auto evt_a = evl.repeat(1000ms, [&](const auto& arg) { a.emplace(arg); });
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 11'000ms);
     EXPECT_THAT(evl.getTree()[1U], IsNull());
     EXPECT_FALSE(evl.isEmpty());
 
     // Check the type ID of return type repeat().
-    const auto actual_type_id = decltype(evt_a)::_get_type_id_();
-    EXPECT_THAT(actual_type_id, ElementsAreArray(expected_type_id));
+    EXPECT_THAT(decltype(evt_a)::_get_type_id_(), ElementsAreArray(event_type_id));
 
     auto evt_b = evl.repeat(100ms,  // Smaller deadline goes on the left.
                             [&](const auto& arg) { b.emplace(arg); });
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
-    EXPECT_THAT(evl.getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 10'100ms);
+    EXPECT_THAT(evl.getTree()[1U]->getDeadline().time_since_epoch(), 11'000ms);
     EXPECT_THAT(evl.getTree()[2U], IsNull());
 
     auto evt_c = evl.defer(SteadyClockMock::now() + 2000ms, [&](const auto& arg) { c.emplace(arg); });
     // EXPECT_THAT(evt_c, Optional(_));
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
-    EXPECT_THAT(evl.getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 10'100ms);
+    EXPECT_THAT(evl.getTree()[1U]->getDeadline().time_since_epoch(), 11'000ms);
     const auto* const f3 = evl.getTree()[2U];
-    EXPECT_THAT(f3->getDeadline().value().time_since_epoch(), 12'000ms);  // New entry.
+    EXPECT_THAT(f3->getDeadline().time_since_epoch(), 12'000ms);  // New entry.
     EXPECT_THAT(evl.getTree()[3U], IsNull());
 
     auto evt_d = evl.defer(SteadyClockMock::now() + 2000ms,  // Same deadline!
                            [&](const auto& arg) { d.emplace(arg); });
     // EXPECT_THAT(evt_d, NotNull());
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 10'100ms);
-    EXPECT_THAT(evl.getTree()[1U]->getDeadline().value().time_since_epoch(), 11'000ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 10'100ms);
+    EXPECT_THAT(evl.getTree()[1U]->getDeadline().time_since_epoch(), 11'000ms);
     EXPECT_THAT(evl.getTree()[2U], f3);  // Entry added before this one.
     const auto* const f4 = evl.getTree()[3U];
     EXPECT_THAT(f3, Ne(f4));
-    EXPECT_THAT(f4->getDeadline().value().time_since_epoch(), 12'000ms);  // New entry, same deadline added later.
+    EXPECT_THAT(f4->getDeadline().time_since_epoch(), 12'000ms);  // New entry, same deadline added later.
     EXPECT_THAT(evl.getTree()[4U], IsNull());
 
     // Poll but there are no pending Events yet.
@@ -164,7 +163,7 @@ TEST(TestOlgaScheduler, EventLoopBasic)
     EXPECT_FALSE(d);
     a.reset();
     b.reset();
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 11'200ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 11'200ms);
 
     // Move on. Let C&D fire, they are canceled automatically.
     SteadyClockMock::advance(900ms);
@@ -173,7 +172,7 @@ TEST(TestOlgaScheduler, EventLoopBasic)
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 12'100ms);
     EXPECT_THAT(out.worst_lateness, 800ms);
     EXPECT_THAT(out.approx_now.time_since_epoch(), 12'000ms);
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 12'100ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 12'100ms);
     EXPECT_THAT(evl.getTree().size(), 2);  // C&D have left us.
     EXPECT_TRUE(a);
     EXPECT_THAT(a.value().deadline.time_since_epoch(), 12'000ms);
@@ -188,26 +187,26 @@ TEST(TestOlgaScheduler, EventLoopBasic)
     c.reset();
     d.reset();
     // Ensure the deadline is cleared on those events that are canceled.
-    EXPECT_TRUE(evt_a.getDeadline());
-    EXPECT_TRUE(evt_b.getDeadline());
-    EXPECT_FALSE(evt_c.getDeadline());
-    EXPECT_FALSE(evt_d.getDeadline());
+    EXPECT_THAT(evt_a.getDeadline(), Gt(Loop::time_point::min()));
+    EXPECT_THAT(evt_b.getDeadline(), Gt(Loop::time_point::min()));
+    EXPECT_THAT(evt_c.getDeadline(), Loop::time_point::min());
+    EXPECT_THAT(evt_d.getDeadline(), Loop::time_point::min());
 
     // Drop the second event and ensure it is removed from the tree immediately.
     SteadyClockMock::advance(1050ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 13'050ms);
-    EXPECT_TRUE(evt_b.getDeadline());
+    EXPECT_THAT(evt_b.getDeadline(), Gt(Loop::time_point::min()));
     evt_b.cancel();
-    EXPECT_FALSE(evt_b.getDeadline());     // Unregistered, cleared.
-    EXPECT_THAT(evl.getTree().size(), 1);  // Freed already.
-    evt_b.cancel();                        // Idempotency.
-    EXPECT_FALSE(evt_b.getDeadline());     // Ditto.
-    EXPECT_THAT(evl.getTree().size(), 1);  // Ditto.
+    EXPECT_THAT(evt_b.getDeadline(), Loop::time_point::min());  // Unregistered, cleared.
+    EXPECT_THAT(evl.getTree().size(), 1);                       // Freed already.
+    evt_b.cancel();                                             // Idempotency.
+    EXPECT_THAT(evt_b.getDeadline(), Loop::time_point::min());  // Ditto.
+    EXPECT_THAT(evl.getTree().size(), 1);                       // Ditto.
     out = evl.spin();
     EXPECT_THAT(out.next_deadline.time_since_epoch(), 14'000ms);  // B removed so the next one is A.
     EXPECT_THAT(out.worst_lateness, 50ms);
     EXPECT_THAT(out.approx_now.time_since_epoch(), 13'050ms);
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 14'000ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 14'000ms);
     EXPECT_THAT(1, evl.getTree().size());  // Second dropped.
     EXPECT_TRUE(a);
     EXPECT_THAT(a.value().deadline.time_since_epoch(), 13'000ms);
@@ -271,11 +270,10 @@ TEST(TestOlgaScheduler, EventLoopPoll)
         EXPECT_FALSE(last_tp);
         last_tp = arg.deadline;
     });
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 110ms);
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 110ms);
 
     // Check the type ID of return type poll().
-    const auto actual_type_id = decltype(evt)::_get_type_id_();
-    EXPECT_THAT(actual_type_id, ElementsAreArray(expected_type_id));
+    EXPECT_THAT(decltype(evt)::_get_type_id_(), ElementsAreArray(event_type_id));
 
     SteadyClockMock::advance(30ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 130ms);
@@ -283,7 +281,7 @@ TEST(TestOlgaScheduler, EventLoopPoll)
     EXPECT_TRUE(last_tp);
     EXPECT_THAT(last_tp.value().time_since_epoch(), 110ms);
     last_tp.reset();
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 140ms);  // Skipped ahead!
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 140ms);  // Skipped ahead!
 
     SteadyClockMock::advance(70ms);
     EXPECT_THAT(SteadyClockMock::now().time_since_epoch(), 200ms);
@@ -291,7 +289,7 @@ TEST(TestOlgaScheduler, EventLoopPoll)
     EXPECT_TRUE(last_tp);
     EXPECT_THAT(last_tp.value().time_since_epoch(), 140ms);
     last_tp.reset();
-    EXPECT_THAT(evl.getTree()[0U]->getDeadline().value().time_since_epoch(), 210ms);  // Skipped ahead!
+    EXPECT_THAT(evl.getTree()[0U]->getDeadline().time_since_epoch(), 210ms);  // Skipped ahead!
 }
 
 TEST(TestOlgaScheduler, EventLoopDefer_single_overdue)
@@ -304,8 +302,7 @@ TEST(TestOlgaScheduler, EventLoopDefer_single_overdue)
     auto evt = evl.defer(SteadyClockMock::now() + 1000ms, [](const auto&) {});
 
     // Check the type ID of return type defer().
-    const auto actual_type_id = decltype(evt)::_get_type_id_();
-    EXPECT_THAT(actual_type_id, ElementsAreArray(expected_type_id));
+    EXPECT_THAT(decltype(evt)::_get_type_id_(), ElementsAreArray(event_type_id));
 
     // This is special case - only one deferred event (and no "repeat"-s!), and it is already overdue (by +30ms).
     // So, `next_deadline` should be `time_point::max()` b/c there will be nothing left pending after spin.
